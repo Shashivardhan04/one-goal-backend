@@ -116,24 +116,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// app.use((req, res, next) => {
-//   const forwarded = req.headers["x-forwarded-for"];
-//   const ip = forwarded ? forwarded.split(",")[0] : req.socket.remoteAddress;
-
-//   logger.info(
-//     `🌐 Incoming request from IP: ${ip} - ${req.method} ${req.originalUrl}`
-//   );
-//   next();
-// });
-
-// app.use((req, res, next) => {
-//   const clientIP = req.headers["x-forwarded-for"] || req.ip;
-//   logger.info(
-//     `🌐 Incoming request from IP: ${clientIP} - ${req.method} ${req.originalUrl}`
-//   );
-//   next();
-// });
-
 // swagger documentation configuration
 
 const swaggerOptions = {
