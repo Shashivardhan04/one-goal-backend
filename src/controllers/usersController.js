@@ -2,62 +2,66 @@ const userModel = require("../models/userSchema");
 const leadsModel = require("../models/leadsSchema");
 const taskModel = require("../models/taskSchema");
 const callLogsModel = require("../models/callLogsSchema");
-const moment = require('moment');
-const {verifyPassword, hashPassword, generateSalt} = require("../functions/authScrypt");
+const moment = require("moment");
+const {
+  verifyPassword,
+  hashPassword,
+  generateSalt,
+} = require("../functions/authScrypt");
 const userAuthorizationModel = require("../models/userAuthorizationSchema.js");
-const organizationModel=require("../models/organizationSchema")
+const organizationModel = require("../models/organizationSchema");
 const mongoose = require("mongoose");
-const {getTimeDifferenceInSeconds}=require("../constants/constants.js")
-const axios = require('axios');
-const {encryptPAN,decryptPAN} =require("../constants/constants");
+const { getTimeDifferenceInSeconds } = require("../constants/constants.js");
+const axios = require("axios");
+const { encryptPAN, decryptPAN } = require("../constants/constants");
 const MB_URL = process.env.MB_URL;
-const {generateRandomString,generateDefaultPassword} = require('../functions/validation.js')
+const {
+  generateRandomString,
+  generateDefaultPassword,
+} = require("../functions/validation.js");
 const app = require("firebase");
-var ObjectId = require('mongoose').Types.ObjectId;
+var ObjectId = require("mongoose").Types.ObjectId;
 const timestamp = app.firestore.Timestamp;
 
 const isMobileNoValid = (mobile) => {
   // Check if the mobile number is numeric and has a length between 10 and 15
   if (!/^\d{10,15}$/.test(mobile)) {
-      return "Mobile number should be of min. 10 digits. Please re-enter";
+    return "Mobile number should be of min. 10 digits. Please re-enter";
   }
 
   // Check if the mobile number starts with a 0
   if (mobile.startsWith("0")) {
-      return "Mobile number should not start with 0. Please re-enter.";
+    return "Mobile number should not start with 0. Please re-enter.";
   }
 
   // Check if the mobile number starts with 6, 7, 8, or 9
   if (!/^[6789]/.test(mobile)) {
-      return "Invalid Mobile Number. Please re-enter";
+    return "Invalid Mobile Number. Please re-enter";
   }
 
   return true;
-}
+};
 
-const getBranchUsers = async (
-  uid,
-  organization_id,
-  permission
-) => {
-  const users = await userModel.find({
-    organization_id,
-    branch: { $in: permission },
-  },
-  {uid: 1}
-);
+const getBranchUsers = async (uid, organization_id, permission) => {
+  const users = await userModel.find(
+    {
+      organization_id,
+      branch: { $in: permission },
+    },
+    { uid: 1 }
+  );
   let usersList = [uid];
   users.forEach((user) => usersList.push(user.uid));
   return usersList;
 };
 
 const getTeamUsers = async (uid, organization_id) => {
-  const user = await userModel.findOne({uid});
-  let reportingUsers = await userModel.find({reporting_to:user.user_email});
+  const user = await userModel.findOne({ uid });
+  let reportingUsers = await userModel.find({ reporting_to: user.user_email });
   let reportingUsersUids = [];
-  reportingUsers.map(item => {
+  reportingUsers.map((item) => {
     reportingUsersUids.push(item.uid);
-  })
+  });
   return reportingUsersUids;
   // const users = await userModel.find({ organization_id });
   // const user = users.filter((user) => user.uid === uid);
@@ -99,7 +103,12 @@ const getTeamUsers = async (uid, organization_id) => {
   // return usersList;
 };
 
-const checkUserExistsInOrganization = async (organization_id, user_email, contact_no, employee_id) => {
+const checkUserExistsInOrganization = async (
+  organization_id,
+  user_email,
+  contact_no,
+  employee_id
+) => {
   if (employee_id) {
     // Check if email, contact_no, or employee_id already exists in the organization
     const existingUser = await userModel.findOne({
@@ -107,8 +116,8 @@ const checkUserExistsInOrganization = async (organization_id, user_email, contac
       $or: [
         // { user_email },
         { contact_no },
-        { employee_id }
-      ]
+        { employee_id },
+      ],
     });
 
     if (existingUser) {
@@ -119,7 +128,7 @@ const checkUserExistsInOrganization = async (organization_id, user_email, contac
   } else {
     // Check if email, contact_no, or employee_id already exists in the organization
     const existingUser = await userModel.findOne({
-      contact_no
+      contact_no,
     });
 
     if (existingUser) {
@@ -128,17 +137,15 @@ const checkUserExistsInOrganization = async (organization_id, user_email, contac
       return false;
     }
   }
-
-}
+};
 
 // const checkUserExistsInReadpro = async (organization_id, user_email, contact_no, employee_id, uid) => {
 //   if (employee_id) {
 //     // Check if email, contact_no, or employee_id already exists in the organization
 //     const existingUser = await userModel.findOne({
 //       organization_id,
-//        employee_id 
+//        employee_id
 //     });
-
 
 //     if (existingUser) {
 //       if (existingUser.uid == uid) {
@@ -155,7 +162,6 @@ const checkUserExistsInOrganization = async (organization_id, user_email, contac
 //       contact_no
 //     });
 
-
 //     if (existingUser) {
 //       if (existingUser.uid == uid) {
 //         return false;
@@ -169,34 +175,19 @@ const checkUserExistsInOrganization = async (organization_id, user_email, contac
 
 // }
 
-const checkEmployeedIdInReadpro = async (organization_id, user_email, contact_no, employee_id, uid) => {
+const checkEmployeedIdInReadpro = async (
+  organization_id,
+  user_email,
+  contact_no,
+  employee_id,
+  uid
+) => {
   if (employee_id) {
     // Check if email, contact_no, or employee_id already exists in the organization
     const existingUser = await userModel.findOne({
       organization_id,
-       employee_id 
+      employee_id,
     });
-
-
-    if (existingUser) {
-      if (existingUser.uid == uid) {
-        return false;
-      } else {
-        return true;
-      }
-    } else {
-      return false;
-    }
-  } 
-
-}
-
-const checkMobileNumberExistsInReadpro = async (organization_id, user_email, contact_no, employee_id, uid) => {
-  if(contact_no){
-    const existingUser = await userModel.findOne({
-      contact_no
-    });
-
 
     if (existingUser) {
       if (existingUser.uid == uid) {
@@ -208,32 +199,55 @@ const checkMobileNumberExistsInReadpro = async (organization_id, user_email, con
       return false;
     }
   }
+};
 
-}
+const checkMobileNumberExistsInReadpro = async (
+  organization_id,
+  user_email,
+  contact_no,
+  employee_id,
+  uid
+) => {
+  if (contact_no) {
+    const existingUser = await userModel.findOne({
+      contact_no,
+    });
+
+    if (existingUser) {
+      if (existingUser.uid == uid) {
+        return false;
+      } else {
+        return true;
+      }
+    } else {
+      return false;
+    }
+  }
+};
 
 const isValidMobile = (mobile) => {
   // Check if the mobile number is numeric and has a length between 10 and 15
   if (!/^\d{10,10}$/.test(mobile)) {
-      return false
+    return false;
   }
 
   // Check if the mobile number starts with a 0
   if (mobile.startsWith("0")) {
-      return false
+    return false;
   }
 
   // Check if the mobile number starts with 6, 7, 8, or 9
   if (!/^[6789]/.test(mobile)) {
-      return false
+    return false;
   }
 
   return true;
-}
+};
 
 const userController = {};
 
 userController.Insert = async (req, res) => {
-  console.log("Punit Insert Present : "+JSON.stringify(req.body));
+  console.log("Punit Insert Present : " + JSON.stringify(req.body));
   const newUser = new userModel({
     created_at:
       typeof req.body.created_at == "object"
@@ -273,13 +287,14 @@ userController.Insert = async (req, res) => {
     user_last_name: req.body.user_last_name,
     branchPermission: req.body.branchPermission,
     leadView: req.body.leadView,
-    group_head_name:req.body.group_head_name,
-    employee_id:req.body.employee_id,
-    user_oid:req.body.OID,
-    user_super_oid:req.body.SOID
+    group_head_name: req.body.group_head_name,
+    employee_id: req.body.employee_id,
+    user_oid: req.body.OID,
+    user_super_oid: req.body.SOID,
   });
   newUser.save(function (err, doc) {
     if (err) {
+      console.log("111111111111111");
       console.log(err);
       res.send(err);
     } else {
@@ -350,54 +365,55 @@ userController.updateData = (req, res) => {
 
 userController.GetUser = async (req, res) => {
   let data = req.body;
-  if(data.uid){
-    try{
+  if (data.uid) {
+    try {
       const query = {
         uid: data.uid,
       };
-      
+
       const result = await userModel.find(query);
       if (result) {
-        return res.status(200).json({ "success": true, "data": result });
+        return res.status(200).json({ success: true, data: result });
       } else {
-        return res.status(400).json({ "success": false, "error": "User not found" });
+        return res
+          .status(400)
+          .json({ success: false, error: "User not found" });
       }
-    }catch(err){
-      return res.status(400).json({"success": false,"error":err.message});
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err.message });
     }
-  }else{
-    return res.status(400).json({"success": false,"error":"some fields are missing"});
+  } else {
+    return res
+      .status(400)
+      .json({ success: false, error: "some fields are missing" });
   }
-}
+};
 
 userController.GetUsersList = async (req, res) => {
-
   let data = req.body;
   let userQuery = {};
   let findQuery = {
-    status:"ACTIVE"
+    status: "ACTIVE",
   };
-  if(data.uid){
+  if (data.uid) {
     try {
       let uid = data.uid;
-      let search = data.searchString
-      ? data.searchString
-      : "";
+      let search = data.searchString ? data.searchString : "";
       // let liveTrackingStatus = data.status;
       let user_name_list = [];
       search.split(",").forEach((string) => {
         searchString = string.trim();
         const re = new RegExp(searchString, "i");
-        if(searchString !== "") {
+        if (searchString !== "") {
           user_name_list.push(re);
         }
       });
       if (user_name_list.length !== 0) {
         userQuery["$or"] = [
-          {"user_first_name":{"$in":user_name_list}},
-          {"user_last_name":{"$in":user_name_list}},
-          {"user_email":{"$in":user_name_list}}
-        ]
+          { user_first_name: { $in: user_name_list } },
+          { user_last_name: { $in: user_name_list } },
+          { user_email: { $in: user_name_list } },
+        ];
       }
       // else if(typeof liveTrackingStatus === "boolean" && liveTrackingStatus === false){
       //   userQuery["$or"] = [
@@ -410,19 +426,22 @@ userController.GetUsersList = async (req, res) => {
       // }
       const resultUser = await userModel.find({ uid });
       if (resultUser.length === 0) {
-        return res.status(400).json({"success": false,"error":"User Not Found"});
+        return res
+          .status(400)
+          .json({ success: false, error: "User Not Found" });
       }
       const user = resultUser[0];
       const profile = user.profile;
       const organization_id = user.organization_id;
       userQuery["organization_id"] = { $in: [organization_id] };
-      let reportingUsers = await userModel
-      .find(userQuery)
-      .select("uid -_id");
+      let reportingUsers = await userModel.find(userQuery).select("uid -_id");
 
       reportingUsers = reportingUsers.map(({ uid }) => uid);
 
-      if (profile.toLowerCase() == "lead manager" || profile.toLowerCase() == "admin") {
+      if (
+        profile.toLowerCase() == "lead manager" ||
+        profile.toLowerCase() == "admin"
+      ) {
         const permission = user.branchPermission;
         if (
           permission === undefined ||
@@ -431,13 +450,15 @@ userController.GetUsersList = async (req, res) => {
         ) {
           try {
             findQuery["uid"] = {
-              $in:reportingUsers
-            }
+              $in: reportingUsers,
+            };
             // return res.status(200).json({"success": true,data:findQuery});
             let userData = await userModel.find(findQuery).limit(10);
-            return res.status(200).json({"success": true,data:userData});
+            return res.status(200).json({ success: true, data: userData });
           } catch (error) {
-            return res.status(400).json({"success": false,"error":error.message});
+            return res
+              .status(400)
+              .json({ success: false, error: error.message });
           }
         } else {
           let usersList = await getBranchUsers(
@@ -445,440 +466,487 @@ userController.GetUsersList = async (req, res) => {
             organization_id,
             permission
           );
-          const interesectionArray = usersList.filter(
-            (value) => reportingUsers.includes(value)
+          const interesectionArray = usersList.filter((value) =>
+            reportingUsers.includes(value)
           );
           try {
             findQuery["uid"] = {
-              $in:interesectionArray
-            }
+              $in: interesectionArray,
+            };
             let userData = await userModel.find(findQuery).limit(10);
-            return res.status(200).json({"success": true,data:userData});
+            return res.status(200).json({ success: true, data: userData });
           } catch (error) {
-            return res.status(400).json({"success": false,"error":error.message});
+            return res
+              .status(400)
+              .json({ success: false, error: error.message });
           }
         }
       } else if (profile.toLowerCase() == "team lead") {
         // let user = await userModel.findOne({uid:data.uid});
         // let userEmail = user?.user_email ? user.user_email : "";
-        let usersList = await getTeamUsers(
-          uid,
-          organization_id
-        );
+        let usersList = await getTeamUsers(uid, organization_id);
         const interesectionArray = usersList.filter((value) =>
-        reportingUsers.includes(value)
-      );
+          reportingUsers.includes(value)
+        );
         try {
           findQuery["uid"] = {
-            $in:interesectionArray
-          }
+            $in: interesectionArray,
+          };
           let userData = await userModel.find(findQuery).limit(10);
-          return res.status(200).json({"success": true,data:userData});
+          return res.status(200).json({ success: true, data: userData });
         } catch (error) {
-          return res.status(400).json({"success": false,"error":error.message});
+          return res.status(400).json({ success: false, error: error.message });
         }
-      }else{
-        return res.status(400).json({"success": false,"error":"Incorrect Profile"});
+      } else {
+        return res
+          .status(400)
+          .json({ success: false, error: "Incorrect Profile" });
       }
     } catch (error) {
-      return res.status(400).json({"success": false,"error":error.message});
+      return res.status(400).json({ success: false, error: error.message });
     }
-  }else{
-    return res.status(400).json({"success": false,"error":"some fields are missing"});
+  } else {
+    return res
+      .status(400)
+      .json({ success: false, error: "some fields are missing" });
   }
-  }
+};
 
-  userController.UpdateUserRating = async (req, res) => {
-    let data = req.body;
-    if(data.uid && data.rating && data.rating_given_by){
-      try {
-        const query = {
-          uid: data.uid,
-        };
-        const update = {
-          user_rating: data.rating,
-          rating_given_by:data.rating_given_by
-        };
-        const options = {
-          new: true
-        };
-        const updatedDocument = await userModel.findOneAndUpdate(query, update,options);
-        return res.status(200).json({"success": true,data:updatedDocument});
-      } catch (err) {
-        return res.status(400).json({"success": false,"error":err});
-      }
-    }else{
-      return res.status(400).json({"success": false,"error":"some fields are missing"});
-    }
-    }
-
-    userController.GetUserReport = async (req, res) => {
-        // const currentDate = new Date();
-        // const startDateOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-        // const formattedCurrentDate = currentDate.toISOString().slice(0, 10);
-        // const formattedStartDateOfMonth = startDateOfMonth.toISOString().slice(0, 10);
-        const startOfMonth = moment().startOf('month').toDate();
-        let startDate = startOfMonth;
-        let endDate = moment().toDate();
-      let data = req.body;
-      if(data.uid){
-        try{
-          const callsQuery = {
-            uid: data.uid,
-            created_at: {$gte: moment(startDate).utcOffset('+05:30').toDate(),$lte: moment(endDate).utcOffset('+05:30').toDate()}
-          };
-          const wonQuery = {
-            uid: data.uid,
-            stage: "WON",
-            stage_change_at: {$gte: moment(startDate).utcOffset('+05:30').toDate(),$lte: moment(endDate).utcOffset('+05:30').toDate()}
-          };
-          const interestedQuery = {
-            uid: data.uid,
-            stage: "INTERESTED",
-            stage_change_at: {$gte: moment(startDate).utcOffset('+05:30').toDate(),$lte: moment(endDate).utcOffset('+05:30').toDate()}
-          };
-          const missedQuery = {
-            uid: data.uid,
-            status: "Pending",
-            due_date: {$lt: moment(endDate).utcOffset('+05:30').toDate()}
-          };
-          const meetingsQuery = {
-            uid: data.uid,
-            type: {
-              $in: ["Site Visit", "Meeting"]
-            },
-            status: "Completed",
-            completed_at: {$gte: moment(startDate).utcOffset('+05:30').toDate(),$lte: moment(endDate).utcOffset('+05:30').toDate()}
-          };
-          const callsTotal = await callLogsModel.countDocuments(callsQuery);
-          const wonTotal = await leadsModel.countDocuments(wonQuery);
-          const interestedTotal = await leadsModel.countDocuments(interestedQuery);
-          const missedTotal = await taskModel.countDocuments(missedQuery);
-          const meetingsTotal = await taskModel.countDocuments(meetingsQuery);
-          return res.status(200).json({"success": true,data:{
-            totalCalls:callsTotal,
-            totalWon:wonTotal,
-            totalInterested:interestedTotal,
-            totalMissed:missedTotal,
-            totalMeetings:meetingsTotal
-          }});
-        }catch(err){
-          return res.status(400).json({"success": false,"error":err});
-        }
-      }else{
-        return res.status(400).json({"success": false,"error":"some fields are missing"});
-      }
-    }
-
-    
-
-    userController.fetchSpecificData= async(req,res)=>{
-      let apiStart = new Date();
-      let projection = {
-        employee_id: 1,
-        user_first_name: 1,
-        user_last_name: 1,
-        user_email: 1
-      }
-      let timeTakenOverall;
- 
-
-      let Employee_id=[];
-      let Employee_Name=[];
-      const uid = req.body.uid;
-    
-       
-    
-     
-        let resultUser = await userModel.find({ uid });
-        let query1 = new Date();
-      let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart,query1);
-      console.log(`api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`);
-       
-             if(!resultUser){
-              return res.status(400).json({
-                success:false,
-                error:"resultUser not found"
-              })
-           }
-    
-      const user = resultUser && resultUser[0];
-      const profile = user && user?.profile;
-      const organization_id = user && user?.organization_id;
-    
-    
-    
-      if(profile.toLowerCase() == "lead manager" || profile.toLowerCase() == "admin"){
-        const permission = user.branchPermission;
-    
-    
-        if (
-          permission === undefined ||
-          (permission && permission.length === 0) ||
-          (permission && permission.includes("All"))
-        ){
-    
-         try {
-          const user = await userModel.find({organization_id:organization_id},projection);
-          let query1 = new Date();
-      let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart,query1);
-      console.log(`api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`);
-    
-          user.forEach((val)=>{
-          const {employee_id,user_first_name,user_last_name,user_email}=val;
-        
-             if(employee_id){
-              // Employee_id.push({[employee_id]:uid});
-              Employee_id.push({label:employee_id,value:user_email});
-             }
-             const temp=user_first_name+" "+user_last_name;
-            //  if(!temp){}
-            //  Employee_Name.push({[temp]:uid});
-             Employee_Name.push({label:temp,value:user_email});
-    
-           })
-    
-         
-           let apiEnd = new Date();
-           timeTakenOverall = getTimeDifferenceInSeconds(apiStart,apiEnd);
-           console.log(`api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`);
-         return res.status(200).json({
-           success:true,
-           data:{Employee_id,Employee_Name}
-         })
-    
-         } catch (error) {
-          return res.status(500).json({
-                    success:false,
-                    error:error
-                  })
-         }
-    
-        }else{
-         try {
-          // let usersList = await getBranchUsers(
-          //   uid,
-          //   organization_id,
-          //   permission
-          // );
-    
-          const user = await userModel.find({organization_id:organization_id,branch: { $in: permission }},projection);
-          let query1 = new Date();
-          let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart,query1);
-          console.log(`api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`);
-    
-            user.forEach((val)=>{
-            const {employee_id,user_first_name,user_last_name,user_email}=val;
-          
-               if(employee_id){
-                // Employee_id.push({[employee_id]:uid});
-                Employee_id.push({label:employee_id,value:user_email});
-               }
-               const temp=user_first_name+" "+user_last_name;
-              //  if(!temp){}
-              //  Employee_Name.push({[temp]:uid});
-               Employee_Name.push({label:temp,value:user_email});
-      
-             })
-    
-           
-             let apiEnd = new Date();
-             timeTakenOverall = getTimeDifferenceInSeconds(apiStart,apiEnd);
-             console.log(`api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`);
-           return res.status(200).json({
-             success:true,
-             data:{Employee_id,Employee_Name}
-           })
-         } catch (error) {
-          return res.status(500).json({
-            success:false,
-            error:error
-          })
-         }
-        }
-    
-      }
-    
-    
-      else if(profile.toLowerCase()==="team lead" || profile.toLowerCase()==="team leader"){
-       try {
-        // let usersList = await getTeamUsers(
-        //   uid,
-        //   organization_id
-        // );
-    
-    
-        const user = await userModel.find({organization_id,reporting_to:resultUser[0].user_email},projection);
-        let query1 = new Date();
-      let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart,query1);
-      console.log(`api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`);
-    
-            user.forEach((val)=>{
-            const {employee_id,user_first_name,user_last_name,user_email}=val;
-          
-               if(employee_id){
-                // Employee_id.push({[employee_id]:uid});
-                Employee_id.push({label:employee_id,value:user_email});
-               }
-               const temp=user_first_name+" "+user_last_name;
-              //  if(!temp){}
-              //  Employee_Name.push({[temp]:uid});
-               Employee_Name.push({label:temp,value:user_email});
-      
-             })
-    
-             let apiEnd = new Date();
-             timeTakenOverall = getTimeDifferenceInSeconds(apiStart,apiEnd);
-             console.log(`api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`);
-    
-          return  res.status(200).json({
-             success:true,
-             data:{Employee_id,Employee_Name}
-           })
-       } catch (error) {
-        return res.status(500).json({
-          success:false,
-          error:error
-        })
-       }
-    
-    
-    
-      }else{
-    
-    
-      try {
-        const user = await userModel.find({uid:uid},projection);
-        let query1 = new Date();
-      let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart,query1);
-      console.log(`api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`);
-    
-        user.forEach((val)=>{
-        const {employee_id,user_first_name,user_last_name,user_email}=val;
-      
-           if(employee_id){
-            // Employee_id.push({[employee_id]:uid});
-            Employee_id.push({label:employee_id,value:user_email});
-           }
-           const temp=user_first_name+" "+user_last_name;
-          //  if(!temp){}
-          //  Employee_Name.push({[temp]:uid});
-           Employee_Name.push({label:temp,value:user_email});
-    
-         })
-    
-         let apiEnd = new Date();
-         timeTakenOverall = getTimeDifferenceInSeconds(apiStart,apiEnd);
-         console.log(`api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`);
-    
-       return res.status(200).json({
-         success:true,
-         data:{Employee_id,Employee_Name}
-       })
-        
-      } catch (error) {
-        return res.status(500).json({
-          success:false,
-          error:error
-        })
-      }
-    
-      }
-      
-    
-        }
-
-
-        userController.getUserDetail = async (req, res) => {
-          try {
-              const data= req.body;
-              if (!data.uid) {
-                  return res.status(400).json({ error: 'UID is required' });
-              }
-              const results = await userModel.find({ uid:data.uid });
-
-              if (results.length === 0) {
-                  return res.status(404).json({ message: 'User not found' });
-              }
-
-              return res.status(200).json(results);
-          } catch (err) {
-              console.error('Error fetching user details:', err);
-             return res.status(500).json({ error: 'Internal server error' });
-          }
+userController.UpdateUserRating = async (req, res) => {
+  let data = req.body;
+  if (data.uid && data.rating && data.rating_given_by) {
+    try {
+      const query = {
+        uid: data.uid,
       };
+      const update = {
+        user_rating: data.rating,
+        rating_given_by: data.rating_given_by,
+      };
+      const options = {
+        new: true,
+      };
+      const updatedDocument = await userModel.findOneAndUpdate(
+        query,
+        update,
+        options
+      );
+      return res.status(200).json({ success: true, data: updatedDocument });
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err });
+    }
+  } else {
+    return res
+      .status(400)
+      .json({ success: false, error: "some fields are missing" });
+  }
+};
 
-
-      const createUsersInMB = async (mobile,email,firstname,lastname,city,country,super_user_oid) => {
-        try {
-          const Url = MB_URL+'/userauthapi/user-registration-mb';
-          const data ={
-            ubimobile:mobile,
-            ubiemail:email,
-            ubifname:firstname,
-            ubilname:lastname,
-            ubiusertype : "I",
-            source : "ReadPro",
-            geoCity :"2624",
-            superuser:super_user_oid
-          }
-      console.log("data createUsersInMB",data)
-      const response = await axios.post(Url, data, {
-        headers: {
-          'Content-Type': 'application/json',
+userController.GetUserReport = async (req, res) => {
+  // const currentDate = new Date();
+  // const startDateOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  // const formattedCurrentDate = currentDate.toISOString().slice(0, 10);
+  // const formattedStartDateOfMonth = startDateOfMonth.toISOString().slice(0, 10);
+  const startOfMonth = moment().startOf("month").toDate();
+  let startDate = startOfMonth;
+  let endDate = moment().toDate();
+  let data = req.body;
+  if (data.uid) {
+    try {
+      const callsQuery = {
+        uid: data.uid,
+        created_at: {
+          $gte: moment(startDate).utcOffset("+05:30").toDate(),
+          $lte: moment(endDate).utcOffset("+05:30").toDate(),
+        },
+      };
+      const wonQuery = {
+        uid: data.uid,
+        stage: "WON",
+        stage_change_at: {
+          $gte: moment(startDate).utcOffset("+05:30").toDate(),
+          $lte: moment(endDate).utcOffset("+05:30").toDate(),
+        },
+      };
+      const interestedQuery = {
+        uid: data.uid,
+        stage: "INTERESTED",
+        stage_change_at: {
+          $gte: moment(startDate).utcOffset("+05:30").toDate(),
+          $lte: moment(endDate).utcOffset("+05:30").toDate(),
+        },
+      };
+      const missedQuery = {
+        uid: data.uid,
+        status: "Pending",
+        due_date: { $lt: moment(endDate).utcOffset("+05:30").toDate() },
+      };
+      const meetingsQuery = {
+        uid: data.uid,
+        type: {
+          $in: ["Site Visit", "Meeting"],
+        },
+        status: "Completed",
+        completed_at: {
+          $gte: moment(startDate).utcOffset("+05:30").toDate(),
+          $lte: moment(endDate).utcOffset("+05:30").toDate(),
+        },
+      };
+      const callsTotal = await callLogsModel.countDocuments(callsQuery);
+      const wonTotal = await leadsModel.countDocuments(wonQuery);
+      const interestedTotal = await leadsModel.countDocuments(interestedQuery);
+      const missedTotal = await taskModel.countDocuments(missedQuery);
+      const meetingsTotal = await taskModel.countDocuments(meetingsQuery);
+      return res.status(200).json({
+        success: true,
+        data: {
+          totalCalls: callsTotal,
+          totalWon: wonTotal,
+          totalInterested: interestedTotal,
+          totalMissed: missedTotal,
+          totalMeetings: meetingsTotal,
         },
       });
-          // Return response data
-          console.log("createUsersInMB date : ",new Date() )
-          console.log("createUsersInMB from MB",response.data)
-          if(response.data.USERID===undefined){
-            console.error("Error calling createUsersInMB API:", response.data.MESSAGE);
-            return false
+    } catch (err) {
+      return res.status(400).json({ success: false, error: err });
+    }
+  } else {
+    return res
+      .status(400)
+      .json({ success: false, error: "some fields are missing" });
+  }
+};
+
+userController.fetchSpecificData = async (req, res) => {
+  let apiStart = new Date();
+  let projection = {
+    employee_id: 1,
+    user_first_name: 1,
+    user_last_name: 1,
+    user_email: 1,
+  };
+  let timeTakenOverall;
+
+  let Employee_id = [];
+  let Employee_Name = [];
+  const uid = req.body.uid;
+
+  let resultUser = await userModel.find({ uid });
+  let query1 = new Date();
+  let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
+  console.log(
+    `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
+  );
+
+  if (!resultUser) {
+    return res.status(400).json({
+      success: false,
+      error: "resultUser not found",
+    });
+  }
+
+  const user = resultUser && resultUser[0];
+  const profile = user && user?.profile;
+  const organization_id = user && user?.organization_id;
+
+  if (
+    profile.toLowerCase() == "lead manager" ||
+    profile.toLowerCase() == "admin"
+  ) {
+    const permission = user.branchPermission;
+
+    if (
+      permission === undefined ||
+      (permission && permission.length === 0) ||
+      (permission && permission.includes("All"))
+    ) {
+      try {
+        const user = await userModel.find(
+          { organization_id: organization_id },
+          projection
+        );
+        let query1 = new Date();
+        let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
+        console.log(
+          `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
+        );
+
+        user.forEach((val) => {
+          const { employee_id, user_first_name, user_last_name, user_email } =
+            val;
+
+          if (employee_id) {
+            // Employee_id.push({[employee_id]:uid});
+            Employee_id.push({ label: employee_id, value: user_email });
           }
-          return response.data.USERID;
-        } catch (error) {
-          // If an error occurs, handle it here
-          console.error("Error calling createUsersInMB API:", error.message);
-          return false;
-        }
+          const temp = user_first_name + " " + user_last_name;
+          //  if(!temp){}
+          //  Employee_Name.push({[temp]:uid});
+          Employee_Name.push({ label: temp, value: user_email });
+        });
+
+        let apiEnd = new Date();
+        timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
+        console.log(
+          `api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`
+        );
+        return res.status(200).json({
+          success: true,
+          data: { Employee_id, Employee_Name },
+        });
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          error: error,
+        });
       }
+    } else {
+      try {
+        // let usersList = await getBranchUsers(
+        //   uid,
+        //   organization_id,
+        //   permission
+        // );
+
+        const user = await userModel.find(
+          { organization_id: organization_id, branch: { $in: permission } },
+          projection
+        );
+        let query1 = new Date();
+        let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
+        console.log(
+          `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
+        );
+
+        user.forEach((val) => {
+          const { employee_id, user_first_name, user_last_name, user_email } =
+            val;
+
+          if (employee_id) {
+            // Employee_id.push({[employee_id]:uid});
+            Employee_id.push({ label: employee_id, value: user_email });
+          }
+          const temp = user_first_name + " " + user_last_name;
+          //  if(!temp){}
+          //  Employee_Name.push({[temp]:uid});
+          Employee_Name.push({ label: temp, value: user_email });
+        });
+
+        let apiEnd = new Date();
+        timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
+        console.log(
+          `api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`
+        );
+        return res.status(200).json({
+          success: true,
+          data: { Employee_id, Employee_Name },
+        });
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          error: error,
+        });
+      }
+    }
+  } else if (
+    profile.toLowerCase() === "team lead" ||
+    profile.toLowerCase() === "team leader"
+  ) {
+    try {
+      // let usersList = await getTeamUsers(
+      //   uid,
+      //   organization_id
+      // );
+
+      const user = await userModel.find(
+        { organization_id, reporting_to: resultUser[0].user_email },
+        projection
+      );
+      let query1 = new Date();
+      let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
+      console.log(
+        `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
+      );
+
+      user.forEach((val) => {
+        const { employee_id, user_first_name, user_last_name, user_email } =
+          val;
+
+        if (employee_id) {
+          // Employee_id.push({[employee_id]:uid});
+          Employee_id.push({ label: employee_id, value: user_email });
+        }
+        const temp = user_first_name + " " + user_last_name;
+        //  if(!temp){}
+        //  Employee_Name.push({[temp]:uid});
+        Employee_Name.push({ label: temp, value: user_email });
+      });
+
+      let apiEnd = new Date();
+      timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
+      console.log(
+        `api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: { Employee_id, Employee_Name },
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        error: error,
+      });
+    }
+  } else {
+    try {
+      const user = await userModel.find({ uid: uid }, projection);
+      let query1 = new Date();
+      let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
+      console.log(
+        `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
+      );
+
+      user.forEach((val) => {
+        const { employee_id, user_first_name, user_last_name, user_email } =
+          val;
+
+        if (employee_id) {
+          // Employee_id.push({[employee_id]:uid});
+          Employee_id.push({ label: employee_id, value: user_email });
+        }
+        const temp = user_first_name + " " + user_last_name;
+        //  if(!temp){}
+        //  Employee_Name.push({[temp]:uid});
+        Employee_Name.push({ label: temp, value: user_email });
+      });
+
+      let apiEnd = new Date();
+      timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
+      console.log(
+        `api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: { Employee_id, Employee_Name },
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        error: error,
+      });
+    }
+  }
+};
+
+userController.getUserDetail = async (req, res) => {
+  try {
+    const data = req.body;
+    if (!data.uid) {
+      return res.status(400).json({ error: "UID is required" });
+    }
+    const results = await userModel.find({ uid: data.uid });
+
+    if (results.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json(results);
+  } catch (err) {
+    console.error("Error fetching user details:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const createUsersInMB = async (
+  mobile,
+  email,
+  firstname,
+  lastname,
+  city,
+  country,
+  super_user_oid
+) => {
+  try {
+    const Url = MB_URL + "/userauthapi/user-registration-mb";
+    const data = {
+      ubimobile: mobile,
+      ubiemail: email,
+      ubifname: firstname,
+      ubilname: lastname,
+      ubiusertype: "I",
+      source: "ReadPro",
+      geoCity: "2624",
+      superuser: super_user_oid,
+    };
+    console.log("data createUsersInMB", data);
+    const response = await axios.post(Url, data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    // Return response data
+    console.log("createUsersInMB date : ", new Date());
+    console.log("createUsersInMB from MB", response.data);
+    if (response.data.USERID === undefined) {
+      console.error(
+        "Error calling createUsersInMB API:",
+        response.data.MESSAGE
+      );
+      return false;
+    }
+    return response.data.USERID;
+  } catch (error) {
+    // If an error occurs, handle it here
+    console.error("Error calling createUsersInMB API:", error.message);
+    return false;
+  }
+};
 
 userController.createUserWithAuth = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   let UserInMb = "";
   try {
-    const { user_email, contact_no, employee_id, organization_id ,profile} = req.body;
+    const { user_email, contact_no, employee_id, organization_id, profile } =
+      req.body;
 
-    let userAlreadyExistsInReadpro = await userModel.findOne({user_email});
+    let userAlreadyExistsInReadpro = await userModel.findOne({ user_email });
 
-    let NoCheck = isMobileNoValid(contact_no)
+    let NoCheck = isMobileNoValid(contact_no);
 
-    if(NoCheck!==true){
+    if (NoCheck !== true) {
       await session.abortTransaction();
-    session.endSession();
+      session.endSession();
       return res.status(400).json({
         success: false,
-        message: NoCheck
+        message: NoCheck,
       });
     }
-    if(userAlreadyExistsInReadpro){
+    if (userAlreadyExistsInReadpro) {
       await session.abortTransaction();
-    session.endSession();
+      session.endSession();
       return res.status(400).json({
         success: false,
-        message: "Email ID already exists"
+        message: "Email ID already exists",
       });
     }
 
-    let userAlreadyExistsInOrg = await checkUserExistsInOrganization(organization_id,user_email,contact_no,employee_id);
+    let userAlreadyExistsInOrg = await checkUserExistsInOrganization(
+      organization_id,
+      user_email,
+      contact_no,
+      employee_id
+    );
 
-    if(userAlreadyExistsInOrg){
+    if (userAlreadyExistsInOrg) {
       await session.abortTransaction();
-    session.endSession();
+      session.endSession();
       return res.status(400).json({
         success: false,
-        message: "User with the same contact number, or employee ID already exists in the organization"
+        message:
+          "User with the same contact number, or employee ID already exists in the organization",
       });
     }
     // if(!req.body.SOID){
@@ -891,7 +959,9 @@ userController.createUserWithAuth = async (req, res) => {
     //   });
     // }
 
-    const organization = await organizationModel.findOne({ organization_id: req.body.organization_id });
+    const organization = await organizationModel.findOne({
+      organization_id: req.body.organization_id,
+    });
     if (!organization) {
       await session.abortTransaction();
       session.endSession();
@@ -905,24 +975,32 @@ userController.createUserWithAuth = async (req, res) => {
 
     let role = "";
     if (profile === "Lead Manager") {
-      role = "Lead Manager"
+      role = "Lead Manager";
     } else if (profile === "Team Lead") {
-      role = "Team Lead"
+      role = "Team Lead";
     } else if (profile === "Sales") {
-      role = "Sales"
+      role = "Sales";
     } else if (profile === "Operation Manager") {
-      role = "Operation Manager"
+      role = "Operation Manager";
     }
 
-    console.log("req.body",req.body)
+    console.log("req.body", req.body);
     defaultPassword = generateDefaultPassword(req.body);
-    let passwordSalt =  generateSalt();
+    let passwordSalt = generateSalt();
     let hashedPassword = await hashPassword(defaultPassword, passwordSalt);
     let uid = new ObjectId();
 
     if (req.body.SOID) {
-      UserInMb = await createUsersInMB(req.body.contact_no, req.body.user_email, req.body.user_first_name, req.body.user_last_name, city, country, req.body.SOID)
-      console.log("UserInMb", UserInMb)
+      UserInMb = await createUsersInMB(
+        req.body.contact_no,
+        req.body.user_email,
+        req.body.user_first_name,
+        req.body.user_last_name,
+        city,
+        country,
+        req.body.SOID
+      );
+      console.log("UserInMb", UserInMb);
       if (UserInMb === false) {
         await session.abortTransaction();
         session.endSession();
@@ -933,50 +1011,53 @@ userController.createUserWithAuth = async (req, res) => {
       }
     }
 
+    const newUser = await userModel.create(
+      [
+        {
+          contact_no: req.body.contact_no,
+          created_by: req.body.created_by,
+          designation: req.body.designation,
+          branch: req.body.branch,
+          device_id: req.body.device_id,
+          organization_id: req.body.organization_id,
+          profile: req.body.profile,
+          reporting_to: req.body.reporting_to,
+          status: req.body.status,
+          team: req.body.team,
+          uid: uid,
+          user_email: req.body.user_email,
+          user_first_name: req.body.user_first_name,
+          user_image: req.body.user_image,
+          user_last_name: req.body.user_last_name,
+          branchPermission: req.body.branchPermission,
+          leadView: req.body.leadView,
+          group_head_name: req.body.group_head_name,
+          employee_id: req.body.employee_id,
+          password: hashedPassword,
+          passwordSalt: passwordSalt,
+          role: role,
+          first_login: true,
+          user_oid: req.body.OID ? req.body.OID : UserInMb,
+          user_super_oid: req.body.SOID ? req.body.SOID : "",
+        },
+      ],
+      { session }
+    );
 
-    const newUser = await userModel.create([{
-      contact_no: req.body.contact_no,
-      created_by: req.body.created_by,
-      designation: req.body.designation,
-      branch: req.body.branch,
-      device_id: req.body.device_id,
-      organization_id: req.body.organization_id,
-      profile: req.body.profile,
-      reporting_to: req.body.reporting_to,
-      status: req.body.status,
-      team: req.body.team,
-      uid: uid,
-      user_email: req.body.user_email,
-      user_first_name: req.body.user_first_name,
-      user_image: req.body.user_image,
-      user_last_name: req.body.user_last_name,
-      branchPermission: req.body.branchPermission,
-      leadView: req.body.leadView,
-      group_head_name: req.body.group_head_name,
-      employee_id: req.body.employee_id,
-      password: hashedPassword,
-      passwordSalt: passwordSalt,
-      role: role,
-      first_login: true,
-      user_oid:req.body.OID?req.body.OID:UserInMb,
-      user_super_oid:req.body.SOID?req.body.SOID:""
-    }], { session });
-
-      await session.commitTransaction();
-      session.endSession();
-      return res.status(201).json({
-        success: true,
-        message: "User created successfully",
-        data: {
-          user: newUser[0]
-        }
-      });
-    
+    await session.commitTransaction();
+    session.endSession();
+    return res.status(201).json({
+      success: true,
+      message: "User created successfully",
+      data: {
+        user: newUser[0],
+      },
+    });
   } catch (error) {
     // res.status(400).json({ error: error.message });
     await session.abortTransaction();
     session.endSession();
-    console.log("error11111",error.message)
+    console.log("error11111", error.message);
     return res.status(400).json({
       success: false,
       message: "An error occured, Please try again 111111",
@@ -987,42 +1068,42 @@ userController.createUserWithAuth = async (req, res) => {
 
 userController.Update = async (req, res) => {
   try {
-
     let updateData = req.body.data;
     let role = "";
-    if(updateData.profile){
+    if (updateData.profile) {
       if (updateData.profile === "Lead Manager") {
         role = "Lead Manager";
         updateData = {
           ...updateData,
-          role
-        }
+          role,
+        };
       } else if (updateData.profile === "Team Lead") {
         role = "Team Lead";
         updateData = {
           ...updateData,
-          role
-        }
+          role,
+        };
       } else if (updateData.profile === "Sales") {
         role = "Sales";
         updateData = {
           ...updateData,
-          role
-        }
+          role,
+        };
       } else if (updateData.profile === "Operation Manager") {
         role = "Operation Manager";
         updateData = {
           ...updateData,
-          role
-        }
+          role,
+        };
       }
     }
-    const { organization_id, uid, user_email, contact_no, employee_id } = req.body;
+    const { organization_id, uid, user_email, contact_no, employee_id } =
+      req.body;
 
     if (!organization_id || !uid) {
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters"
+        message: "Missing required parameters",
       });
     }
     // console.log("akkaka",contact_no,employee_id);
@@ -1030,27 +1111,39 @@ userController.Update = async (req, res) => {
     if (contact_no) {
       let isMobileValid = isValidMobile(contact_no);
       // console.log("lop",isMobileValid)
-      if(isMobileValid === false){
+      if (isMobileValid === false) {
         return res.status(400).json({
           success: false,
-          message: "Invalid mobile number"
+          message: "Invalid mobile number",
         });
       }
-      let userAlreadyExistsInOrg = await checkMobileNumberExistsInReadpro(organization_id,user_email,contact_no,employee_id,uid);
+      let userAlreadyExistsInOrg = await checkMobileNumberExistsInReadpro(
+        organization_id,
+        user_email,
+        contact_no,
+        employee_id,
+        uid
+      );
       if (userAlreadyExistsInOrg) {
         return res.status(400).json({
           success: false,
-          message: "Mobile Number already exists"
+          message: "Mobile Number already exists",
         });
       }
     }
 
     if (employee_id) {
-      let userAlreadyExistsInOrg = await checkEmployeedIdInReadpro(organization_id,user_email,contact_no,employee_id,uid);
+      let userAlreadyExistsInOrg = await checkEmployeedIdInReadpro(
+        organization_id,
+        user_email,
+        contact_no,
+        employee_id,
+        uid
+      );
       if (userAlreadyExistsInOrg) {
         return res.status(400).json({
           success: false,
-          message: "Employee ID already exists"
+          message: "Employee ID already exists",
         });
       }
     }
@@ -1086,7 +1179,7 @@ userController.FetchAll = async (req, res) => {
       });
     }
 
-    let sort = { created_at: -1 }
+    let sort = { created_at: -1 };
 
     const usersDataRaw = await userModel
       .find(
@@ -1098,40 +1191,45 @@ userController.FetchAll = async (req, res) => {
           device_type: 0,
           first_login: 0,
           fcm_token: 0,
-          is_mobile_updation_declared:0,
-          user_mb_isd:0,
-          user_last_login_time:0,
-          password:0,
-          passwordSalt:0,
-          token:0,
+          is_mobile_updation_declared: 0,
+          user_mb_isd: 0,
+          user_last_login_time: 0,
+          password: 0,
+          passwordSalt: 0,
+          token: 0,
         }
       )
       .sort(sort)
       .lean();
-    const usersData = usersDataRaw.map(user => ({
+    const usersData = usersDataRaw.map((user) => ({
       ...user,
       mb_oid_mapped: user.user_oid ? "Yes" : "No",
-    }));    
+    }));
 
-      let query1 = new Date();
+    let query1 = new Date();
     let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
-    console.log(`api endpoint - users/fetchAll, time taken for query 1, ${timeTakenQuery1}`);
-
+    console.log(
+      `api endpoint - users/fetchAll, time taken for query 1, ${timeTakenQuery1}`
+    );
 
     let apiEnd = new Date();
     timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
-    console.log(`api endpoint - users/fetchAll, time taken overall, ${timeTakenOverall}`);
+    console.log(
+      `api endpoint - users/fetchAll, time taken overall, ${timeTakenOverall}`
+    );
     return res.status(200).json({
       success: true,
       message: "Users fetched successfully",
       data: {
-        usersData
-      }
+        usersData,
+      },
     });
   } catch (error) {
     let apiEnd = new Date();
     timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
-    console.log(`api endpoint - users/fetchAll, time taken overall, ${timeTakenOverall}`);
+    console.log(
+      `api endpoint - users/fetchAll, time taken overall, ${timeTakenOverall}`
+    );
     return res.status(400).json({
       success: false,
       message: "An error occured, Please try again",
@@ -1151,14 +1249,16 @@ userController.FetchUser = async (req, res) => {
       });
     }
 
-    const user = await userModel.findOne({ uid: uid }, { password:0,passwordSalt:0 }).lean()
+    const user = await userModel
+      .findOne({ uid: uid }, { password: 0, passwordSalt: 0 })
+      .lean();
 
     return res.status(200).json({
       success: true,
       message: "User fetched successfully",
       data: {
-        user
-      }
+        user,
+      },
     });
   } catch (error) {
     return res.status(400).json({
@@ -1180,14 +1280,16 @@ userController.FetchReportingUser = async (req, res) => {
       });
     }
 
-    const user = await userModel.findOne({ user_email: user_email }, { password:0,passwordSalt:0 }).lean()
+    const user = await userModel
+      .findOne({ user_email: user_email }, { password: 0, passwordSalt: 0 })
+      .lean();
 
     return res.status(200).json({
       success: true,
       message: "User fetched successfully",
       data: {
-        user
-      }
+        user,
+      },
     });
   } catch (error) {
     return res.status(400).json({
@@ -1197,7 +1299,6 @@ userController.FetchReportingUser = async (req, res) => {
     });
   }
 };
-
 
 userController.ResetPasswordForFirstSignIn = async (req, res) => {
   try {
@@ -1214,17 +1315,19 @@ userController.ResetPasswordForFirstSignIn = async (req, res) => {
     let hashedPassword = await hashPassword(password, passwordSalt);
     const user = await userModel.findOneAndUpdate(
       { user_email },
-      { $set: {
-        password: hashedPassword,
-        passwordSalt: passwordSalt,
-        first_login: false
-      } },
+      {
+        $set: {
+          password: hashedPassword,
+          passwordSalt: passwordSalt,
+          first_login: false,
+        },
+      },
       { new: true }
     );
 
     return res.status(200).json({
       success: true,
-      message: "Password Updated successfully"
+      message: "Password Updated successfully",
     });
   } catch (error) {
     return res.status(400).json({
@@ -1235,10 +1338,9 @@ userController.ResetPasswordForFirstSignIn = async (req, res) => {
   }
 };
 
-
 userController.UpdateUserPassword = async (req, res) => {
   try {
-    const { organization_id,user_email, new_password } = req.body;
+    const { organization_id, user_email, new_password } = req.body;
     if (!organization_id || !user_email || !new_password) {
       return res.status(400).json({
         success: false,
@@ -1251,16 +1353,18 @@ userController.UpdateUserPassword = async (req, res) => {
     let hashedPassword = await hashPassword(new_password, passwordSalt);
     const user = await userModel.findOneAndUpdate(
       { organization_id, user_email },
-      { $set: {
-        password: hashedPassword,
-        passwordSalt: passwordSalt,
-      } },
+      {
+        $set: {
+          password: hashedPassword,
+          passwordSalt: passwordSalt,
+        },
+      },
       { new: true }
     );
 
     return res.status(200).json({
       success: true,
-      message: "Password Updated successfully"
+      message: "Password Updated successfully",
     });
   } catch (error) {
     return res.status(400).json({
@@ -1274,10 +1378,9 @@ userController.UpdateUserPassword = async (req, res) => {
 function toCamelCase(str) {
   return str
     .split(" ")
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
 }
-
 
 userController.ImportUsers = async (req, res) => {
   const session = await mongoose.startSession();
@@ -1289,7 +1392,7 @@ userController.ImportUsers = async (req, res) => {
     // const organization_id = req.body.organization_id; // Organization ID can be common for all users
     let userAlreadyExistsInOrg = false;
     let emailIdAlreadyExistsInReadpro = false;
-    let NoCheck = true
+    let NoCheck = true;
     if (!Array.isArray(users) || users.length === 0) {
       return res.status(400).json({
         success: false,
@@ -1301,10 +1404,11 @@ userController.ImportUsers = async (req, res) => {
     let bulkUsersAuthorizationToImport = [];
 
     for (let user of users) {
-      const { user_email, contact_no, employee_id, profile, organization_id } = user;
+      const { user_email, contact_no, employee_id, profile, organization_id } =
+        user;
 
       let password = "";
-       password = generateDefaultPassword(user);
+      password = generateDefaultPassword(user);
       // if (user.user_first_name.length < 4) {
       //  if(user.user_last_name.length <4){
       //   password= user.user_first_name.toUpperCase()+ user.user_last_name.toUpperCase()+"@"+ contact_no.toString().slice(0, 4);
@@ -1321,21 +1425,20 @@ userController.ImportUsers = async (req, res) => {
       //     contact_no.toString().slice(0, 4);
       //  }
 
-        
       // } else {
       //   password =
       //     user.user_first_name.slice(0, 4).toUpperCase() +
       //     "@" +
       //     contact_no.toString().slice(0, 4);
       // }
-       NoCheck = isMobileNoValid(contact_no)
-console.log("NoCheck",NoCheck)
-       if(NoCheck!==true){
+      NoCheck = isMobileNoValid(contact_no);
+      console.log("NoCheck", NoCheck);
+      if (NoCheck !== true) {
         await session.abortTransaction();
-      session.endSession();
+        session.endSession();
         return res.status(200).json({
           success: false,
-          message: NoCheck
+          message: NoCheck,
         });
       }
 
@@ -1346,8 +1449,8 @@ console.log("NoCheck",NoCheck)
         employee_id
       );
 
-      let userExists = await userModel.findOne({user_email});
-      if(userExists){
+      let userExists = await userModel.findOne({ user_email });
+      if (userExists) {
         emailIdAlreadyExistsInReadpro = true;
       }
 
@@ -1361,13 +1464,15 @@ console.log("NoCheck",NoCheck)
       } else if (toCamelCase(profile) === "Operation Manager") {
         role = "Operation Manager";
       }
-      console.log("toCamelCase(profile)",toCamelCase(profile))
-console.log("role",role)
+      console.log("toCamelCase(profile)", toCamelCase(profile));
+      console.log("role", role);
       let passwordSalt = await generateSalt();
       let hashedPassword = await hashPassword(password, passwordSalt);
       let uid = new ObjectId();
       // Fetch city and country from organization
-      const organization = await organizationModel.findOne({ organization_id: user.organization_id });
+      const organization = await organizationModel.findOne({
+        organization_id: user.organization_id,
+      });
       if (!organization) {
         await session.abortTransaction();
         session.endSession();
@@ -1377,12 +1482,14 @@ console.log("role",role)
         });
       }
 
-      const { city, country,oid } = organization; // Extract city and country
+      const { city, country, oid } = organization; // Extract city and country
 
-      const existingUserAuthorization = await userAuthorizationModel.findOne({
-        organization_id: organization_id,
-        uid: profile,
-      }).session(session);
+      const existingUserAuthorization = await userAuthorizationModel
+        .findOne({
+          organization_id: organization_id,
+          uid: profile,
+        })
+        .session(session);
 
       if (existingUserAuthorization) {
         let userAuth = {
@@ -1447,17 +1554,25 @@ console.log("role",role)
             existingUserAuthorization.resource_update_approved,
           resource_delete_approved:
             existingUserAuthorization.resource_delete_approved,
-        }
+        };
         bulkUsersAuthorizationToImport.push(userAuth);
       }
 
       if (oid) {
-        userInMb = await createUsersInMB(user.contact_no, user.user_email, user.user_first_name, user.user_last_name, city, country, user.SOID);
+        userInMb = await createUsersInMB(
+          user.contact_no,
+          user.user_email,
+          user.user_first_name,
+          user.user_last_name,
+          city,
+          country,
+          user.SOID
+        );
 
         if (userInMb === false) {
           await session.abortTransaction();
           session.endSession();
-          console.log(`Failed to create user in MB for ${user.user_email}`)
+          console.log(`Failed to create user in MB for ${user.user_email}`);
           return res.status(400).json({
             success: false,
             message: `Failed to create users`,
@@ -1489,14 +1604,12 @@ console.log("role",role)
         passwordSalt: passwordSalt,
         role: role,
         first_login: true,
-        user_oid:req.body.OID?req.body.OID:userInMb,
-        user_super_oid:user.SOID ? user.SOID : ""
-      }
+        user_oid: req.body.OID ? req.body.OID : userInMb,
+        user_super_oid: user.SOID ? user.SOID : "",
+      };
 
-      
-console.log("userData",userData)
+      console.log("userData", userData);
       bulkUsersToImport.push(userData);
-      
     }
 
     if (userAlreadyExistsInOrg) {
@@ -1509,7 +1622,6 @@ console.log("userData",userData)
       });
     }
 
-    
     if (emailIdAlreadyExistsInReadpro) {
       await session.abortTransaction();
       session.endSession();
@@ -1521,7 +1633,10 @@ console.log("userData",userData)
     }
 
     let bulkUsers = await userModel.insertMany(bulkUsersToImport, { session });
-    let bulkAuthorization = await userAuthorizationModel.insertMany(bulkUsersAuthorizationToImport, { session });
+    let bulkAuthorization = await userAuthorizationModel.insertMany(
+      bulkUsersAuthorizationToImport,
+      { session }
+    );
 
     await session.commitTransaction();
     session.endSession();
@@ -1541,63 +1656,73 @@ console.log("userData",userData)
   }
 };
 
-
 userController.CreateSubUser = async (req, res) => {
   try {
-    const { user_email, user_mobile, user_oid, user_first_name, user_last_name, user_super_oid } = req.body;
+    const {
+      user_email,
+      user_mobile,
+      user_oid,
+      user_first_name,
+      user_last_name,
+      user_super_oid,
+    } = req.body;
     // const { admin, organization_id } = req.body;  // Assuming admin and organization_id are passed in the request body
 
     let OrganizationData;
-    OrganizationData= await organizationModel.findOne({oid:user_super_oid})
+    OrganizationData = await organizationModel.findOne({ oid: user_super_oid });
 
-    let orgId = OrganizationData.organization_id
+    let orgId = OrganizationData.organization_id;
 
-    let userCount = await userModel.countDocuments({ orgId});
+    let userCount = await userModel.countDocuments({ orgId });
 
     if (userCount >= OrganizationData.no_of_employees) {
       return res.status(200).json({
         success: false,
         message: `User limit reached. Maximum allowed users are ${no_of_licenses}.`,
-        error:`User limit reached. Maximum allowed users are ${no_of_licenses}.`
+        error: `User limit reached. Maximum allowed users are ${no_of_licenses}.`,
       });
     }
 
     // Check if the user already exists in ReadPro
     let userAlreadyExistsInReadpro = await userModel.findOne({ user_email });
 
-    let userNoAlreadyExistsInReadpro = await userModel.findOne({ contact_no:user_mobile });
-
+    let userNoAlreadyExistsInReadpro = await userModel.findOne({
+      contact_no: user_mobile,
+    });
 
     if (userNoAlreadyExistsInReadpro || userAlreadyExistsInReadpro) {
       return res.status(200).json({
         success: false,
         message: "User already exists",
-        error:"User already exists"
+        error: "User already exists",
       });
     }
 
     // Generate password based on the given logic
     let password = "";
 
-      const mobileDigits = user_mobile.toString().slice(0, 4);
-      if (user_first_name.length >= 4) {
-        password = user_first_name.slice(0, 4).toUpperCase();
-      } else {
-        password = user_first_name.toUpperCase();
-        if (user_last_name) {
-          password += user_last_name.slice(0, 4 - user_first_name.length).toUpperCase();
-        }
-        while (password.length < 4) {
-          password += "0";
-        }
+    const mobileDigits = user_mobile.toString().slice(0, 4);
+    if (user_first_name.length >= 4) {
+      password = user_first_name.slice(0, 4).toUpperCase();
+    } else {
+      password = user_first_name.toUpperCase();
+      if (user_last_name) {
+        password += user_last_name
+          .slice(0, 4 - user_first_name.length)
+          .toUpperCase();
       }
-      password += "@" + mobileDigits;
+      while (password.length < 4) {
+        password += "0";
+      }
+    }
+    password += "@" + mobileDigits;
 
     // Hash the password
     let passwordSalt = await generateSalt();
     let hashedPassword = await hashPassword(password, passwordSalt);
     let uid = new ObjectId();
-    let admin_name = OrganizationData.admin_first_name + OrganizationData.admin_last_name;
+    let admin_name =
+      OrganizationData.admin_first_name + OrganizationData.admin_last_name;
 
     // Create the new user
     const newUser = await userModel.create({
@@ -1625,7 +1750,7 @@ userController.CreateSubUser = async (req, res) => {
       role: "Sales",
       first_login: true,
       user_oid: user_oid,
-      user_super_oid: user_super_oid
+      user_super_oid: user_super_oid,
     });
 
     // Return success response
@@ -1644,29 +1769,29 @@ userController.CreateSubUser = async (req, res) => {
 
 userController.SendOtpBeforeUpdatingMobile = async (req, res) => {
   try {
-    const {oldMobile,mobileIsd,newMobile} = req.body;
+    const { oldMobile, mobileIsd, newMobile } = req.body;
     let sendOtpUrl = MB_URL + "/userauthapi/otp/validate-mobile";
     let sendOtpBody = {
-      "mobile": oldMobile,
-      "mobileIsd": mobileIsd,
-      "newMobile": newMobile
-    }
+      mobile: oldMobile,
+      mobileIsd: mobileIsd,
+      newMobile: newMobile,
+    };
 
     const response = await axios.post(sendOtpUrl, sendOtpBody);
     if (response.data.Status == "Success") {
-      let rfnum = encryptPAN(JSON.stringify(response.data.mobile.userId))
+      let rfnum = encryptPAN(JSON.stringify(response.data.mobile.userId));
       return res.status(200).json({
         success: true,
         message: "OTP sent successfully",
         data: {
-          rfnum
-        }
+          rfnum,
+        },
       });
-    }else{
+    } else {
       return res.status(400).json({
         success: false,
         message: response.data.Desc,
-        error:  response.data.Desc,
+        error: response.data.Desc,
       });
     }
   } catch (error) {
@@ -1680,21 +1805,37 @@ userController.SendOtpBeforeUpdatingMobile = async (req, res) => {
 
 userController.VerifyOtpAndUpdateUser = async (req, res) => {
   try {
-    const { rfnum, oldMobile, mobileIsd, oldMobileOtp, newMobile, newMobileOtp, organization_id, uid, user_email, contact_no, employee_id } = req.body;
+    const {
+      rfnum,
+      oldMobile,
+      mobileIsd,
+      oldMobileOtp,
+      newMobile,
+      newMobileOtp,
+      organization_id,
+      uid,
+      user_email,
+      contact_no,
+      employee_id,
+    } = req.body;
     const decryptedRfNum = decryptPAN(rfnum);
     let verifyOtpUrl = MB_URL + "/userauthapi/otp/update-mobile";
     let verifyOtpBody = {
-      "rfnum": decryptedRfNum,
-      "mobile": oldMobile,
-      "mobileIsd": mobileIsd,
-      "otp": oldMobileOtp,
-      "newMobile": newMobile,
-      "otpNewMobile": newMobileOtp
-    }
+      rfnum: decryptedRfNum,
+      mobile: oldMobile,
+      mobileIsd: mobileIsd,
+      otp: oldMobileOtp,
+      newMobile: newMobile,
+      otpNewMobile: newMobileOtp,
+    };
 
     const response = await axios.post(verifyOtpUrl, verifyOtpBody);
-    let oldMobileOtpVerified = response?.data?.mobile?.otpVerifyStatus ?  response.data.mobile.otpVerifyStatus : false;
-    let newMobileOtpVerified = response?.data?.newMobile?.otpVerifyStatus ?  response.data.newMobile.otpVerifyStatus : false;
+    let oldMobileOtpVerified = response?.data?.mobile?.otpVerifyStatus
+      ? response.data.mobile.otpVerifyStatus
+      : false;
+    let newMobileOtpVerified = response?.data?.newMobile?.otpVerifyStatus
+      ? response.data.newMobile.otpVerifyStatus
+      : false;
     if (oldMobileOtpVerified && newMobileOtpVerified) {
       let updateData = req.body.data;
       let role = "";
@@ -1703,42 +1844,47 @@ userController.VerifyOtpAndUpdateUser = async (req, res) => {
           role = "Lead Manager";
           updateData = {
             ...updateData,
-            role
-          }
+            role,
+          };
         } else if (updateData.profile === "Team Lead") {
           role = "Team Lead";
           updateData = {
             ...updateData,
-            role
-          }
+            role,
+          };
         } else if (updateData.profile === "Sales") {
           role = "Sales";
           updateData = {
             ...updateData,
-            role
-          }
+            role,
+          };
         } else if (updateData.profile === "Operation Manager") {
           role = "Operation Manager";
           updateData = {
             ...updateData,
-            role
-          }
+            role,
+          };
         }
       }
 
       if (!organization_id || !uid) {
         return res.status(400).json({
           success: false,
-          message: "Missing required parameters"
+          message: "Missing required parameters",
         });
       }
 
       if (updateData.contact_no || updateData.employee_id) {
-        let userAlreadyExistsInOrg = await checkUserExistsInOrganization(organization_id, user_email, updateData.contact_no, updateData.employee_id);
+        let userAlreadyExistsInOrg = await checkUserExistsInOrganization(
+          organization_id,
+          user_email,
+          updateData.contact_no,
+          updateData.employee_id
+        );
         if (userAlreadyExistsInOrg) {
           return res.status(400).json({
             success: false,
-            message: "User already exists"
+            message: "User already exists",
           });
         }
       }
@@ -1756,7 +1902,7 @@ userController.VerifyOtpAndUpdateUser = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "OTP verification failed, Please try again",
-        error: "OTP verification failed, Please try again"
+        error: "OTP verification failed, Please try again",
       });
     }
   } catch (error) {
@@ -1768,32 +1914,33 @@ userController.VerifyOtpAndUpdateUser = async (req, res) => {
   }
 };
 
-userController.verifyNumberInDb=async(req,res)=>{
+userController.verifyNumberInDb = async (req, res) => {
   try {
     const { newContactNum } = req.query;
 
-    if(!newContactNum){
+    if (!newContactNum) {
       return res.status(200).json({
         success: false,
         message: "newContactNum does not exist",
-        error: "newContactNum doesn't exist"
+        error: "newContactNum doesn't exist",
       });
     }
 
-    const existingContact = await userModel.findOne({ contact_no: newContactNum });
+    const existingContact = await userModel.findOne({
+      contact_no: newContactNum,
+    });
     if (existingContact) {
       return res.status(200).json({
         success: false,
         message: "New contact number already exists",
-        error: "Contact number already in use"
+        error: "Contact number already in use",
       });
-    }else{
+    } else {
       return res.status(200).json({
         success: true,
-        message: "number validation successfully"
+        message: "number validation successfully",
       });
     }
-    
   } catch (error) {
     return res.status(400).json({
       success: false,
@@ -1801,7 +1948,7 @@ userController.verifyNumberInDb=async(req,res)=>{
       error: error.message,
     });
   }
-}
+};
 
 userController.updateContactNumberFromMB = async (req, res) => {
   try {
@@ -1813,7 +1960,7 @@ userController.updateContactNumberFromMB = async (req, res) => {
       return res.status(200).json({
         success: false,
         message: "User does not exist",
-        error: "user_oid doesn't exist"
+        error: "user_oid doesn't exist",
       });
     }
 
@@ -1822,28 +1969,27 @@ userController.updateContactNumberFromMB = async (req, res) => {
       return res.status(200).json({
         success: false,
         message: "Old contact number does not match",
-        error: "The old contact number doesn't match the record"
+        error: "The old contact number doesn't match the record",
       });
     }
 
     // Update contact number
-    await userModel.findByIdAndUpdate({_id:user._id}, { $set: { contact_no: newContactNum } });
+    await userModel.findByIdAndUpdate(
+      { _id: user._id },
+      { $set: { contact_no: newContactNum } }
+    );
 
     return res.status(200).json({
       success: true,
-      message: "Contact number updated successfully"
+      message: "Contact number updated successfully",
     });
-
   } catch (error) {
     return res.status(400).json({
       success: false,
       message: "An error occurred, please try again",
-      error: error.message
+      error: error.message,
     });
   }
 };
-
-
-
 
 module.exports = userController;
