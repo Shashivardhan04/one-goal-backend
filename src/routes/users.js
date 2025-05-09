@@ -1,8 +1,9 @@
 const express = require("express");
+const logger = require("../services/logger"); // ensure correct path to your logger file
 const userController = require("../controllers/usersController");
-var router = express.Router();
-//router.get('/', userController.createUser);
+const router = express.Router();
 
+// Destructure controller functions
 const {
   Insert,
   findByOrgan_ID,
@@ -29,48 +30,140 @@ const {
   verifyNumberInDb,
 } = userController;
 
-router.get("/", (req, res) => res.send("you are in users"));
+// 🧪 Test route
+router.get("/", (req, res) => {
+  logger.info("🟢 /users - Hit test route");
+  res.send("you are in users");
+});
 
-router.post("/newUser", Insert);
+// 👤 Create a new user
+router.post("/newUser", (req, res, next) => {
+  logger.info("📩 /newUser - Creating new user");
+  Insert(req, res, next);
+});
 
-router.post("/findByOrganizationId", findByOrgan_ID);
+// 🔍 Find users by organization ID
+router.post("/findByOrganizationId", (req, res, next) => {
+  logger.info("🔎 /findByOrganizationId - Searching users by organization");
+  findByOrgan_ID(req, res, next);
+});
 
-router.post("/updateData", updateData);
+// ✏️ Update user data
+router.post("/updateData", (req, res, next) => {
+  logger.info("✏️ /updateData - Updating user data");
+  updateData(req, res, next);
+});
 
-router.post("/getUsersList", GetUsersList);
+// 📄 Get a list of users
+router.post("/getUsersList", (req, res, next) => {
+  logger.info("📄 /getUsersList - Fetching users list");
+  GetUsersList(req, res, next);
+});
 
-router.post("/updateUserRating", UpdateUserRating);
+// ⭐ Update user rating
+router.post("/updateUserRating", (req, res, next) => {
+  logger.info("⭐ /updateUserRating - Updating user rating");
+  UpdateUserRating(req, res, next);
+});
 
-router.post("/getUserReport", GetUserReport);
+// 📊 Generate user report
+router.post("/getUserReport", (req, res, next) => {
+  logger.info("📊 /getUserReport - Generating user report");
+  GetUserReport(req, res, next);
+});
 
-router.post("/fetchSpecificData", fetchSpecificData);
+// 🔍 Fetch specific user data
+router.post("/fetchSpecificData", (req, res, next) => {
+  logger.info("🔍 /fetchSpecificData - Fetching specific user data");
+  fetchSpecificData(req, res, next);
+});
 
-router.post("/getUserDetail", getUserDetail);
+// 📋 Get user detail
+router.post("/getUserDetail", (req, res, next) => {
+  logger.info("📋 /getUserDetail - Fetching user detail");
+  getUserDetail(req, res, next);
+});
 
-router.post("/createUserWithAuth", createUserWithAuth);
+// 🔐 Create user with authentication
+router.post("/createUserWithAuth", (req, res, next) => {
+  logger.info("🔐 /createUserWithAuth - Creating user with auth");
+  createUserWithAuth(req, res, next);
+});
 
-router.post("/update", Update);
+// 🔄 Update a user record
+router.post("/update", (req, res, next) => {
+  logger.info("🔄 /update - Updating user record");
+  Update(req, res, next);
+});
 
-router.get("/fetchAll", FetchAll);
+// 📦 Fetch all users
+router.get("/fetchAll", (req, res, next) => {
+  logger.info("📦 /fetchAll - Fetching all users");
+  FetchAll(req, res, next);
+});
 
-router.get("/fetchUser", FetchUser);
+// 🔍 Fetch single user
+router.get("/fetchUser", (req, res, next) => {
+  logger.info("👤 /fetchUser - Fetching one user");
+  FetchUser(req, res, next);
+});
 
-router.get("/fetchReportingUser", FetchReportingUser);
+// 📑 Get users under reporting structure
+router.get("/fetchReportingUser", (req, res, next) => {
+  logger.info("📑 /fetchReportingUser - Fetching reporting users");
+  FetchReportingUser(req, res, next);
+});
 
-router.post("/resetPasswordForFirstSignIn", ResetPasswordForFirstSignIn);
+// 🔒 First sign-in password reset
+router.post("/resetPasswordForFirstSignIn", (req, res, next) => {
+  logger.info(
+    "🔒 /resetPasswordForFirstSignIn - Resetting password for first sign-in"
+  );
+  ResetPasswordForFirstSignIn(req, res, next);
+});
 
-router.post("/updateUserPassword", UpdateUserPassword);
+// 🔑 Update password for user
+router.post("/updateUserPassword", (req, res, next) => {
+  logger.info("🔑 /updateUserPassword - Updating user password");
+  UpdateUserPassword(req, res, next);
+});
 
-router.post("/importUsers", ImportUsers);
+// 📤 Import users in bulk
+router.post("/importUsers", (req, res, next) => {
+  logger.info("📤 /importUsers - Importing users");
+  ImportUsers(req, res, next);
+});
 
-router.post("/createSubUser", CreateSubUser);
+// 👥 Create sub-user under a parent user
+router.post("/createSubUser", (req, res, next) => {
+  logger.info("👥 /createSubUser - Creating sub-user");
+  CreateSubUser(req, res, next);
+});
 
-router.post("/sendOtpBeforeUpdatingMobile", SendOtpBeforeUpdatingMobile);
+// 📲 Send OTP before updating mobile
+router.post("/sendOtpBeforeUpdatingMobile", (req, res, next) => {
+  logger.info(
+    "📲 /sendOtpBeforeUpdatingMobile - Sending OTP before mobile update"
+  );
+  SendOtpBeforeUpdatingMobile(req, res, next);
+});
 
-router.post("/verifyOtpAndUpdateUser", VerifyOtpAndUpdateUser);
+// ✅ Verify OTP and update user contact
+router.post("/verifyOtpAndUpdateUser", (req, res, next) => {
+  logger.info("✅ /verifyOtpAndUpdateUser - Verifying OTP & updating user");
+  VerifyOtpAndUpdateUser(req, res, next);
+});
 
-router.post("/updateUserContactMMB", updateContactNumberFromMB);
+// 🔄 Update contact number from MMB (mobile-based modification)
+router.post("/updateUserContactMMB", (req, res, next) => {
+  logger.info("🔄 /updateUserContactMMB - Updating contact from MMB");
+  updateContactNumberFromMB(req, res, next);
+});
 
-router.get("/verifyNum", verifyNumberInDb);
+// 🕵️ Verify number in database
+router.get("/verifyNum", (req, res, next) => {
+  logger.info("🕵️ /verifyNum - Verifying mobile number in DB");
+  verifyNumberInDb(req, res, next);
+});
 
 module.exports = router;
