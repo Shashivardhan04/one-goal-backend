@@ -42,6 +42,12 @@ router.post("/newUser", (req, res, next) => {
   Insert(req, res, next);
 });
 
+// 🔍 Fetch user based on filters or input
+router.post("/getUser", (req, res, next) => {
+  logger.info("🔍 /getUser - Fetching user based on filters or conditions");
+  GetUser(req, res, next);
+});
+
 // 🔍 Find users by organization ID
 router.post("/findByOrganizationId", (req, res, next) => {
   logger.info("🔎 /findByOrganizationId - Searching users by organization");
@@ -52,6 +58,12 @@ router.post("/findByOrganizationId", (req, res, next) => {
 router.post("/updateData", (req, res, next) => {
   logger.info("✏️ /updateData - Updating user data");
   updateData(req, res, next);
+});
+
+// 🆔 Find user by UID
+router.post("/findByUID", (req, res, next) => {
+  logger.info("🆔 /findByUID - Finding user by UID");
+  FindByUid(req, res, next);
 });
 
 // 📄 Get a list of users
