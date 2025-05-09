@@ -1,479 +1,169 @@
-const express = require('express');
-const userController = require('../controllers/usersController');
-var router = express.Router();
-//router.get('/', userController.createUser);
+const express = require("express");
+const logger = require("../services/logger"); // ensure correct path to your logger file
+const userController = require("../controllers/usersController");
+const router = express.Router();
 
-const { Insert, findByOrgan_ID, FindByUid, updateData,GetUser,GetUsersList,UpdateUserRating,GetUserReport, fetchSpecificData,getUserDetail, createUserWithAuth, Update, FetchAll, FetchUser, ResetPasswordForFirstSignIn,UpdateUserPassword,FetchReportingUser, ImportUsers,CreateSubUser,SendOtpBeforeUpdatingMobile, VerifyOtpAndUpdateUser,updateContactNumberFromMB,verifyNumberInDb } = userController;
+// Destructure controller functions
+const {
+  Insert,
+  findByOrgan_ID,
+  FindByUid,
+  updateData,
+  GetUser,
+  GetUsersList,
+  UpdateUserRating,
+  GetUserReport,
+  fetchSpecificData,
+  getUserDetail,
+  createUserWithAuth,
+  Update,
+  FetchAll,
+  FetchUser,
+  ResetPasswordForFirstSignIn,
+  UpdateUserPassword,
+  FetchReportingUser,
+  ImportUsers,
+  CreateSubUser,
+  SendOtpBeforeUpdatingMobile,
+  VerifyOtpAndUpdateUser,
+  updateContactNumberFromMB,
+  verifyNumberInDb,
+} = userController;
 
-/**
- * @openapi
- * /users:
- *   get:
- *     summary: Get User Information
- *     description: Retrieve user information.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   description: A welcome message.
- *             example:
- *               message: "You are in users"
- *     tags:
- *       - user
- */
-router.get('/', (req, res) => res.send('you are in users'));
+// 🧪 Test route
+router.get("/", (req, res) => {
+  logger.info("🟢 /users - Hit test route");
+  res.send("you are in users");
+});
 
+// 👤 Create a new user
+router.post("/newUser", (req, res, next) => {
+  logger.info("📩 /newUser - Creating new user");
+  Insert(req, res, next);
+});
 
-/**
- * @openapi
- * /users/newUser:
- *   post:
- *     summary: Create a New User
- *     description: Create a new user with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               username:
- *                 type: string
- *               email:
- *                 type: string
- *             required:
- *               - username
- *               - email
- *     responses:
- *       201:
- *         description: User created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the user.
- *     tags:
- *       - user
- */
-router.post('/newUser', Insert);
+// 🔍 Find users by organization ID
+router.post("/findByOrganizationId", (req, res, next) => {
+  logger.info("🔎 /findByOrganizationId - Searching users by organization");
+  findByOrgan_ID(req, res, next);
+});
 
-/**
- * @openapi
- * /users/findByUID:
- *   post:
- *     summary: Find User by UID
- *     description: Retrieve user information by UID.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               uid:
- *                 type: string
- *             required:
- *               - uid
- *     responses:
- *       200:
- *         description: User found successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   description: User information based on the provided UID.
- *     tags:
- *       - user
- */
-router.post('/findByUID', FindByUid);
+// ✏️ Update user data
+router.post("/updateData", (req, res, next) => {
+  logger.info("✏️ /updateData - Updating user data");
+  updateData(req, res, next);
+});
 
-/**
- * @openapi
- * /users/findByOrganizationId:
- *   post:
- *     summary: Find User by Organization ID
- *     description: Retrieve users based on the provided Organization ID.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               organizationId:
- *                 type: string
- *             required:
- *               - organizationId
- *     responses:
- *       200:
- *         description: Users found successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   description: User information based on the provided Organization ID.
- *     tags:
- *       - user
- */
-router.post('/findByOrganizationId', findByOrgan_ID);
+// 📄 Get a list of users
+router.post("/getUsersList", (req, res, next) => {
+  logger.info("📄 /getUsersList - Fetching users list");
+  GetUsersList(req, res, next);
+});
 
+// ⭐ Update user rating
+router.post("/updateUserRating", (req, res, next) => {
+  logger.info("⭐ /updateUserRating - Updating user rating");
+  UpdateUserRating(req, res, next);
+});
 
-/**
- * @openapi
- * /users/updateData:
- *   post:
- *     summary: Update User Data
- *     description: Update user data with the provided information.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 description: The ID of the user to update.
- *             required:
- *               - userId
- *     responses:
- *       200:
- *         description: User data updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                   description: A message indicating the status of the update.
- *     tags:
- *       - user
- */
-router.post('/updateData', updateData);
+// 📊 Generate user report
+router.post("/getUserReport", (req, res, next) => {
+  logger.info("📊 /getUserReport - Generating user report");
+  GetUserReport(req, res, next);
+});
 
+// 🔍 Fetch specific user data
+router.post("/fetchSpecificData", (req, res, next) => {
+  logger.info("🔍 /fetchSpecificData - Fetching specific user data");
+  fetchSpecificData(req, res, next);
+});
 
-/**
- * @openapi
- * /users/getUser:
- *   post:
- *     summary: Get User Information
- *     description: Retrieve user information based on the provided user ID.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 description: The ID of the user to retrieve information.
- *             required:
- *               - userId
- *     responses:
- *       200:
- *         description: User information retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   description: User information based on the provided user ID.
- *     tags:
- *       - user
- */
-router.post('/getUser', GetUser);
+// 📋 Get user detail
+router.post("/getUserDetail", (req, res, next) => {
+  logger.info("📋 /getUserDetail - Fetching user detail");
+  getUserDetail(req, res, next);
+});
 
+// 🔐 Create user with authentication
+router.post("/createUserWithAuth", (req, res, next) => {
+  logger.info("🔐 /createUserWithAuth - Creating user with auth");
+  createUserWithAuth(req, res, next);
+});
 
-/**
- * @openapi
- * /users/getUsersList:
- *   post:
- *     summary: Get Users List
- *     description: Retrieve a list of users based on specific criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               criteria:
- *                 type: string
- *             required:
- *               - criteria
- *     responses:
- *       200:
- *         description: Users list retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                   description: A list of users that match the criteria.
- *     tags:
- *       - user
- */
-router.post('/getUsersList', GetUsersList);
+// 🔄 Update a user record
+router.post("/update", (req, res, next) => {
+  logger.info("🔄 /update - Updating user record");
+  Update(req, res, next);
+});
 
+// 📦 Fetch all users
+router.get("/fetchAll", (req, res, next) => {
+  logger.info("📦 /fetchAll - Fetching all users");
+  FetchAll(req, res, next);
+});
 
-/**
- * @openapi
- * /users/updateUserRating:
- *   post:
- *     summary: Update User Rating
- *     description: Update the rating of a user.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *               newRating:
- *                 type: number
- *             required:
- *               - userId
- *               - newRating
- *     responses:
- *       200:
- *         description: User rating updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *     tags:
- *       - user
- */
-router.post('/updateUserRating', UpdateUserRating);
+// 🔍 Fetch single user
+router.get("/fetchUser", (req, res, next) => {
+  logger.info("👤 /fetchUser - Fetching one user");
+  FetchUser(req, res, next);
+});
 
+// 📑 Get users under reporting structure
+router.get("/fetchReportingUser", (req, res, next) => {
+  logger.info("📑 /fetchReportingUser - Fetching reporting users");
+  FetchReportingUser(req, res, next);
+});
 
-/**
- * @openapi
- * /users/getUserReport:
- *   post:
- *     summary: Get User Report
- *     description: Retrieve a report for a specific user.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *             required:
- *               - userId
- *     responses:
- *       200:
- *         description: User report retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   description: The user report data.
- *     tags:
- *       - user
- */
-router.post('/getUserReport', GetUserReport);
+// 🔒 First sign-in password reset
+router.post("/resetPasswordForFirstSignIn", (req, res, next) => {
+  logger.info(
+    "🔒 /resetPasswordForFirstSignIn - Resetting password for first sign-in"
+  );
+  ResetPasswordForFirstSignIn(req, res, next);
+});
 
+// 🔑 Update password for user
+router.post("/updateUserPassword", (req, res, next) => {
+  logger.info("🔑 /updateUserPassword - Updating user password");
+  UpdateUserPassword(req, res, next);
+});
 
-/**
- * @openapi
- * /users/fetchSpecificData:
- *   post:
- *     summary: Fetch Specific User Data
- *     description: Retrieve specific data for a user based on criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *               criteria:
- *                 type: string
- *             required:
- *               - userId
- *               - criteria
- *     responses:
- *       200:
- *         description: Specific user data retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   description: The specific user data that matches the criteria.
- *     tags:
- *       - user
- */
-router.post('/fetchSpecificData',fetchSpecificData);
+// 📤 Import users in bulk
+router.post("/importUsers", (req, res, next) => {
+  logger.info("📤 /importUsers - Importing users");
+  ImportUsers(req, res, next);
+});
 
+// 👥 Create sub-user under a parent user
+router.post("/createSubUser", (req, res, next) => {
+  logger.info("👥 /createSubUser - Creating sub-user");
+  CreateSubUser(req, res, next);
+});
 
-router.post('/getUserDetail', getUserDetail);
+// 📲 Send OTP before updating mobile
+router.post("/sendOtpBeforeUpdatingMobile", (req, res, next) => {
+  logger.info(
+    "📲 /sendOtpBeforeUpdatingMobile - Sending OTP before mobile update"
+  );
+  SendOtpBeforeUpdatingMobile(req, res, next);
+});
 
-router.post('/createUserWithAuth', createUserWithAuth);
+// ✅ Verify OTP and update user contact
+router.post("/verifyOtpAndUpdateUser", (req, res, next) => {
+  logger.info("✅ /verifyOtpAndUpdateUser - Verifying OTP & updating user");
+  VerifyOtpAndUpdateUser(req, res, next);
+});
 
-router.post('/update', Update);
+// 🔄 Update contact number from MMB (mobile-based modification)
+router.post("/updateUserContactMMB", (req, res, next) => {
+  logger.info("🔄 /updateUserContactMMB - Updating contact from MMB");
+  updateContactNumberFromMB(req, res, next);
+});
 
-router.get('/fetchAll', FetchAll);
-
-router.get('/fetchUser', FetchUser);
-
-router.get('/fetchReportingUser', FetchReportingUser);
-
-router.post('/resetPasswordForFirstSignIn', ResetPasswordForFirstSignIn);
-
-router.post('/updateUserPassword', UpdateUserPassword);
-
-router.post('/importUsers', ImportUsers);
-
-router.post('/createSubUser', CreateSubUser);
-
-router.post('/sendOtpBeforeUpdatingMobile', SendOtpBeforeUpdatingMobile);
-
-router.post('/verifyOtpAndUpdateUser', VerifyOtpAndUpdateUser);
-
-router.post("/updateUserContactMMB",updateContactNumberFromMB)
-
-router.get("/verifyNum",verifyNumberInDb)
+// 🕵️ Verify number in database
+router.get("/verifyNum", (req, res, next) => {
+  logger.info("🕵️ /verifyNum - Verifying mobile number in DB");
+  verifyNumberInDb(req, res, next);
+});
 
 module.exports = router;
