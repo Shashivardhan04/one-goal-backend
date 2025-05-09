@@ -1,5 +1,6 @@
-require('dotenv').config();
-const mongoose = require('mongoose');
+require("dotenv").config();
+const mongoose = require("mongoose");
+const logger = require("./../services/logger");
 
 const URI = process.env.DB_URL;
 
@@ -13,11 +14,9 @@ mongoose.connect(URI, {
 const connection = mongoose.connection;
 
 try {
-  connection.once('open', () => {
-    console.log('DB is running');
+  connection.once("open", () => {
+    logger.info("Database connection established successfully.");
   });
 } catch (error) {
-  console.log('Error while connecting DB');
-
-  console.log(error.message);
+  logger.error(`Database connection failed: ${error.message}`);
 }
