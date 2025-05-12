@@ -19,6 +19,7 @@ const {
   generateRandomString,
   generateDefaultPassword,
 } = require("../functions/validation.js");
+const logger = require("../services/logger");
 const app = require("firebase");
 var ObjectId = require("mongoose").Types.ObjectId;
 const timestamp = app.firestore.Timestamp;
@@ -244,148 +245,316 @@ const isValidMobile = (mobile) => {
   return true;
 };
 
+// Initialize userController if not already declared
 const userController = {};
 
+/**
+ * Convert Firestore-style timestamp to JavaScript Date
+ */
+const convertTimestamp = (ts) =>
+  ts && typeof ts === "object" && "_seconds" in ts
+    ? new Date(ts._seconds * 1000)
+    : new Date();
+
+/**
+ * Insert a new user into the database
+ */
 userController.Insert = async (req, res) => {
-  console.log("Punit Insert Present : " + JSON.stringify(req.body));
-  const newUser = new userModel({
-    created_at:
-      typeof req.body.created_at == "object"
-        ? new timestamp(
-            req.body.created_at._seconds,
-            req.body.created_at._nanoseconds
-          ).toDate()
-        : new Date(),
-    activated_at:
-      typeof req.body.activated_at == "object"
-        ? new timestamp(
-            req.body.activated_at._seconds,
-            req.body.activated_at._nanoseconds
-          ).toDate()
-        : new Date(),
-    deactivated_at:
-      typeof req.body.deactivated_at == "object"
-        ? new timestamp(
-            req.body.deactivated_at._seconds,
-            req.body.deactivated_at._nanoseconds
-          ).toDate()
-        : new Date(),
-    contact_no: req.body.contact_no,
-    created_by: req.body.created_by,
-    designation: req.body.designation,
-    branch: req.body.branch,
-    device_id: req.body.device_id,
-    organization_id: req.body.organization_id,
-    profile: req.body.profile,
-    reporting_to: req.body.reporting_to,
-    status: req.body.status,
-    team: req.body.team,
-    uid: req.body.uid,
-    user_email: req.body.user_email,
-    user_first_name: req.body.user_first_name,
-    user_image: req.body.user_image,
-    user_last_name: req.body.user_last_name,
-    branchPermission: req.body.branchPermission,
-    leadView: req.body.leadView,
-    group_head_name: req.body.group_head_name,
-    employee_id: req.body.employee_id,
-    user_oid: req.body.OID,
-    user_super_oid: req.body.SOID,
-  });
-  newUser.save(function (err, doc) {
-    if (err) {
-      console.log("111111111111111");
-      console.log(err);
-      res.send(err);
-    } else {
-      console.log("Document inserted succussfully!");
-      res.send("user created");
-    }
-  });
-};
+  try {
+    logger.info("📥 User Insert API called");
 
-userController.FindByUid = (req, res) => {
-  console.log(req.body.uid);
-  userModel.find({ uid: req.body.uid }, (err, results) => {
-    if (err) {
-      res.send(err);
-    } else {
-      res.send(results);
-    }
-  });
-};
+    const {
+      created_at,
+      activated_at,
+      deactivated_at,
+      OID,
+      SOID,
+      uid,
+      user_email,
+      ...restBody
+    } = req.body;
 
-userController.findByOrgan_ID = (req, res) => {
-  userModel.find(
-    { organization_id: req.body.organizationId },
-    (err, results) => {
-      if (err) {
-        res.send(err);
-      } else {
-        res.send(results);
-      }
+    // 1. Validate required fields
+    if (!uid || !user_email) {
+      logger.warn("⚠️ Missing required fields: uid or user_email");
+      return res.status(400).json({
+        status: 400,
+        error: "Validation error",
+        message: "UID and user_email are required.",
+      });
     }
-  );
-};
 
-userController.updateData = (req, res) => {
-  const updateData = JSON.parse(JSON.stringify(req.body));
-  updateData.created_at =
-    typeof updateData.created_at == "object"
-      ? new timestamp(
-          updateData.created_at._seconds,
-          updateData.created_at._nanoseconds
-        ).toDate()
-      : new Date();
-  updateData.activated_at =
-    typeof updateData.activated_at == "object"
-      ? new timestamp(
-          updateData.activated_at._seconds,
-          updateData.activated_at._nanoseconds
-        ).toDate()
-      : new Date();
-  updateData.deactivated_at =
-    typeof updateData.deactivated_at == "object"
-      ? new timestamp(
-          updateData.deactivated_at._seconds,
-          updateData.deactivated_at._nanoseconds
-        ).toDate()
-      : new Date();
-  userModel
-    .findOneAndUpdate({ uid: updateData.uid }, { $set: updateData })
-    .exec(function (err, result) {
-      if (err) {
-        console.log(err);
-        res.status(500).send(err);
-      } else {
-        res.status(200).send("Updation DONE!");
-      }
+    // 2. Check for existing user
+    const existingUser = await userModel.findOne({
+      $or: [{ uid }, { user_email }],
     });
+
+    if (existingUser) {
+      logger.warn("⚠️ Duplicate user insert attempt detected");
+      return res.status(409).json({
+        status: 409,
+        error: "Conflict",
+        message: "User with given UID or email already exists.",
+      });
+    }
+
+    // 3. Prepare and save user
+    const userData = {
+      ...restBody,
+      uid,
+      user_email,
+      created_at: convertTimestamp(created_at),
+      activated_at: convertTimestamp(activated_at),
+      deactivated_at: convertTimestamp(deactivated_at),
+      user_oid: OID,
+      user_super_oid: SOID,
+    };
+
+    const newUser = new userModel(userData);
+    const savedUser = await newUser.save();
+
+    logger.info(`✅ User created successfully (ID: ${savedUser.uid})`);
+    return res.status(201).json({
+      status: 201,
+      message: "User created successfully.",
+      userId: savedUser.uid,
+    });
+  } catch (err) {
+    // 4. Handle validation errors
+    if (err.name === "ValidationError") {
+      logger.error("❌ Mongoose Validation Error", err);
+      return res.status(400).json({
+        status: 400,
+        error: "Validation error",
+        message: err.message,
+        fields: err.errors,
+      });
+    }
+
+    // 5. Handle duplicate key error
+    if (err.code === 11000) {
+      logger.error("❌ Duplicate key error", err);
+      return res.status(409).json({
+        status: 409,
+        error: "Duplicate entry",
+        message: "User already exists with same UID or email.",
+        fields: err.keyValue,
+      });
+    }
+
+    // 6. Fallback error
+    logger.error("❌ Internal server error during user insert", err);
+    return res.status(500).json({
+      status: 500,
+      error: "Internal Server Error",
+      message: "An unexpected error occurred. Please try again later.",
+    });
+  }
 };
+
+/**
+ * Get User By  uid and user_email from database
+ */
 
 userController.GetUser = async (req, res) => {
-  let data = req.body;
-  if (data.uid) {
-    try {
-      const query = {
-        uid: data.uid,
-      };
+  try {
+    const { uid, user_email } = req.query;
 
-      const result = await userModel.find(query);
-      if (result) {
-        return res.status(200).json({ success: true, data: result });
-      } else {
-        return res
-          .status(400)
-          .json({ success: false, error: "User not found" });
-      }
-    } catch (err) {
-      return res.status(400).json({ success: false, error: err.message });
+    // Validate input
+    if (!uid && !user_email) {
+      logger.warn("⚠️ Missing required fields: uid or user_email");
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        error: "Missing uid or user_email in query parameters.",
+      });
     }
-  } else {
-    return res
-      .status(400)
-      .json({ success: false, error: "some fields are missing" });
+
+    const query = {};
+    if (uid) query.uid = uid;
+    if (user_email) query.user_email = user_email;
+
+    const result = await userModel.findOne(query).lean();
+
+    if (result) {
+      logger.info(
+        `✅ User found: UID=${uid || "N/A"}, Email=${user_email || "N/A"}`
+      );
+      return res.status(200).json({
+        status: 200,
+        success: true,
+        message: "User found",
+        data: result,
+      });
+    } else {
+      logger.warn("⚠️ User not found for provided query");
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: "User not found.",
+      });
+    }
+  } catch (error) {
+    logger.error("❌ Error while fetching user", error);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      error: "Internal Server Error",
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Get User By  organizationId from database
+ */
+userController.findByOrgan_ID = async (req, res) => {
+  try {
+    const { organization_id } = req.query;
+
+    // Validate query param
+    if (!organization_id) {
+      logger.warn("⚠️ organization_id query parameter is missing");
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "Missing required query parameter: organization_id",
+      });
+    }
+
+    // Query with lean for better performance
+    const users = await userModel.find({ organization_id }).lean();
+
+    if (users.length === 0) {
+      logger.info(`ℹ️ No users found for organization_id: ${organization_id}`);
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: "No users found for the given organization_id.",
+      });
+    }
+
+    logger.info(
+      `✅ Found ${users.length} users for organization_id: ${organization_id}`
+    );
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: `Found ${users.length} user(s) for organization_id: ${organization_id}`,
+      count: users.length,
+      data: users,
+    });
+  } catch (error) {
+    logger.error("❌ Error in findByOrgan_ID", error);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal server error. Please try again later.",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Update User By  uid from database
+ */
+userController.updateData = async (req, res) => {
+  try {
+    logger.info("🔧 updateData API called");
+
+    const updateData = { ...req.body };
+
+    if (!updateData.uid) {
+      logger.warn("⚠️ UID is missing in update request");
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "UID is required to update user data.",
+      });
+    }
+
+    // Convert Firestore-style timestamps
+    updateData.created_at = convertTimestamp(updateData.created_at);
+    updateData.activated_at = convertTimestamp(updateData.activated_at);
+    updateData.deactivated_at = convertTimestamp(updateData.deactivated_at);
+
+    const updatedUser = await userModel
+      .findOneAndUpdate(
+        { uid: updateData.uid },
+        { $set: updateData },
+        { new: true, runValidators: true }
+      )
+      .lean();
+
+    if (!updatedUser) {
+      logger.warn(`⚠️ User not found with UID: ${updateData.uid}`);
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: `User not found with UID: ${updateData.uid}`,
+      });
+    }
+
+    logger.info(`✅ User updated successfully (UID: ${updateData.uid})`);
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: "User updated successfully.",
+      data: updatedUser,
+    });
+  } catch (error) {
+    logger.error("❌ Error updating user", error);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal server error while updating user.",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * GET /users/FindByUid?uid=some_uid
+ */
+userController.FindByUid = async (req, res) => {
+  try {
+    const { uid } = req.query;
+
+    if (!uid) {
+      logger.warn("⚠️ UID query parameter is missing");
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "UID is required in query parameters.",
+      });
+    }
+
+    const user = await userModel.findOne({ uid }).lean();
+
+    if (!user) {
+      logger.info(`❌ No user found with UID: ${uid}`);
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    logger.info(`✅ User found: ${uid}`);
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: "User retrieved successfully.",
+      data: user,
+    });
+  } catch (err) {
+    logger.error("❌ Error retrieving user by UID", err);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal Server Error.",
+      error: err.message,
+    });
   }
 };
 
