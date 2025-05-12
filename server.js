@@ -1,5 +1,5 @@
 require("dotenv").config();
-require("./src/database/db");
+const connectDB = require("./src/database/db");
 // require("./src/database/mariaDb.js");
 const express = require("express");
 const users = require("./src/routes/users");
@@ -67,6 +67,8 @@ const mbResponses = require("./src/routes/mbResponses.js");
 const logger = require("./src/services/logger.js");
 
 const app = express();
+// Connect to DB
+connectDB();
 logger.info("📦 Initializing Express application...");
 const mongoose = require("mongoose");
 const auth = require("./src/middlewares/auth");

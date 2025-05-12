@@ -6,10 +6,10 @@ const router = express.Router();
 // Destructure controller functions
 const {
   Insert,
-  findByOrgan_ID,
-  FindByUid,
-  updateData,
   GetUser,
+  findByOrgan_ID,
+  updateData,
+  FindByUid,
   GetUsersList,
   UpdateUserRating,
   GetUserReport,
@@ -42,16 +42,28 @@ router.post("/newUser", (req, res, next) => {
   Insert(req, res, next);
 });
 
+// 🔍 Fetch user based on filters or input
+router.get("/getUser", (req, res, next) => {
+  logger.info("🔍 /getUser - Fetching user based on query parameters");
+  GetUser(req, res, next);
+});
+
 // 🔍 Find users by organization ID
-router.post("/findByOrganizationId", (req, res, next) => {
+router.get("/findByOrganizationId", (req, res, next) => {
   logger.info("🔎 /findByOrganizationId - Searching users by organization");
   findByOrgan_ID(req, res, next);
 });
 
 // ✏️ Update user data
-router.post("/updateData", (req, res, next) => {
+router.put("/updateData", (req, res, next) => {
   logger.info("✏️ /updateData - Updating user data");
   updateData(req, res, next);
+});
+
+// 🆔 Find user by UID
+router.get("/findByUID", (req, res, next) => {
+  logger.info("🆔 /findByUID - Finding user by UID");
+  FindByUid(req, res, next);
 });
 
 // 📄 Get a list of users
