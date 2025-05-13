@@ -67,31 +67,31 @@ router.get("/findByUID", (req, res, next) => {
 });
 
 // 📄 Get a list of users
-router.post("/getUsersList", (req, res, next) => {
+router.get("/getUsersList", (req, res, next) => {
   logger.info("📄 /getUsersList - Fetching users list");
   GetUsersList(req, res, next);
 });
 
 // ⭐ Update user rating
-router.post("/updateUserRating", (req, res, next) => {
+router.put("/updateUserRating", (req, res, next) => {
   logger.info("⭐ /updateUserRating - Updating user rating");
   UpdateUserRating(req, res, next);
 });
 
 // 📊 Generate user report
-router.post("/getUserReport", (req, res, next) => {
+router.get("/getUserReport", (req, res, next) => {
   logger.info("📊 /getUserReport - Generating user report");
   GetUserReport(req, res, next);
 });
 
 // 🔍 Fetch specific user data
-router.post("/fetchSpecificData", (req, res, next) => {
+router.get("/fetchSpecificData", (req, res, next) => {
   logger.info("🔍 /fetchSpecificData - Fetching specific user data");
   fetchSpecificData(req, res, next);
 });
 
 // 📋 Get user detail
-router.post("/getUserDetail", (req, res, next) => {
+router.get("/getUserDetail", (req, res, next) => {
   logger.info("📋 /getUserDetail - Fetching user detail");
   getUserDetail(req, res, next);
 });
@@ -103,7 +103,7 @@ router.post("/createUserWithAuth", (req, res, next) => {
 });
 
 // 🔄 Update a user record
-router.post("/update", (req, res, next) => {
+router.put("/update", (req, res, next) => {
   logger.info("🔄 /update - Updating user record");
   Update(req, res, next);
 });

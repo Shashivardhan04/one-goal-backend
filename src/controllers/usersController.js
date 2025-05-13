@@ -558,476 +558,405 @@ userController.FindByUid = async (req, res) => {
   }
 };
 
+/**
+ * GET a list of users
+ */
+
 userController.GetUsersList = async (req, res) => {
-  let data = req.body;
-  let userQuery = {};
-  let findQuery = {
-    status: "ACTIVE",
-  };
-  if (data.uid) {
-    try {
-      let uid = data.uid;
-      let search = data.searchString ? data.searchString : "";
-      // let liveTrackingStatus = data.status;
-      let user_name_list = [];
-      search.split(",").forEach((string) => {
-        searchString = string.trim();
-        const re = new RegExp(searchString, "i");
-        if (searchString !== "") {
-          user_name_list.push(re);
-        }
+  try {
+    const { uid, searchString } = req.query;
+
+    if (!uid) {
+      logger.warn("⚠️ UID query parameter missing");
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: "UID is required.",
       });
-      if (user_name_list.length !== 0) {
-        userQuery["$or"] = [
-          { user_first_name: { $in: user_name_list } },
-          { user_last_name: { $in: user_name_list } },
-          { user_email: { $in: user_name_list } },
-        ];
-      }
-      // else if(typeof liveTrackingStatus === "boolean" && liveTrackingStatus === false){
-      //   userQuery["$or"] = [
-      //     {is_live_tracking_active:{$exists:false}},
-      //     {is_live_tracking_active:false}
-      //   ]
-      // }
-      // else if(typeof liveTrackingStatus === "boolean" && liveTrackingStatus === true){
-      //   userQuery["is_live_tracking_active"] = true;
-      // }
-      const resultUser = await userModel.find({ uid });
-      if (resultUser.length === 0) {
-        return res
-          .status(400)
-          .json({ success: false, error: "User Not Found" });
-      }
-      const user = resultUser[0];
-      const profile = user.profile;
-      const organization_id = user.organization_id;
-      userQuery["organization_id"] = { $in: [organization_id] };
-      let reportingUsers = await userModel.find(userQuery).select("uid -_id");
+    }
 
-      reportingUsers = reportingUsers.map(({ uid }) => uid);
+    const user = await userModel.findOne({ uid }).lean();
+    if (!user) {
+      logger.warn(`❌ No user found with UID: ${uid}`);
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: "User not found.",
+      });
+    }
 
-      if (
-        profile.toLowerCase() == "lead manager" ||
-        profile.toLowerCase() == "admin"
-      ) {
-        const permission = user.branchPermission;
-        if (
-          permission === undefined ||
-          (permission && permission.length === 0) ||
-          (permission && permission.includes("All"))
-        ) {
-          try {
-            findQuery["uid"] = {
-              $in: reportingUsers,
-            };
-            // return res.status(200).json({"success": true,data:findQuery});
-            let userData = await userModel.find(findQuery).limit(10);
-            return res.status(200).json({ success: true, data: userData });
-          } catch (error) {
-            return res
-              .status(400)
-              .json({ success: false, error: error.message });
-          }
-        } else {
-          let usersList = await getBranchUsers(
-            uid,
-            organization_id,
-            permission
-          );
-          const interesectionArray = usersList.filter((value) =>
-            reportingUsers.includes(value)
-          );
-          try {
-            findQuery["uid"] = {
-              $in: interesectionArray,
-            };
-            let userData = await userModel.find(findQuery).limit(10);
-            return res.status(200).json({ success: true, data: userData });
-          } catch (error) {
-            return res
-              .status(400)
-              .json({ success: false, error: error.message });
-          }
-        }
-      } else if (profile.toLowerCase() == "team lead") {
-        // let user = await userModel.findOne({uid:data.uid});
-        // let userEmail = user?.user_email ? user.user_email : "";
-        let usersList = await getTeamUsers(uid, organization_id);
-        const interesectionArray = usersList.filter((value) =>
-          reportingUsers.includes(value)
-        );
-        try {
-          findQuery["uid"] = {
-            $in: interesectionArray,
-          };
-          let userData = await userModel.find(findQuery).limit(10);
-          return res.status(200).json({ success: true, data: userData });
-        } catch (error) {
-          return res.status(400).json({ success: false, error: error.message });
-        }
+    const profile = user.profile?.toLowerCase();
+    const organization_id = user.organization_id;
+    const permission = user.branchPermission || [];
+
+    let searchRegexList = [];
+
+    if (searchString) {
+      searchString.split(",").forEach((str) => {
+        const clean = str.trim();
+        if (clean) searchRegexList.push(new RegExp(clean, "i"));
+      });
+    }
+
+    const baseQuery = {
+      organization_id,
+      ...(searchRegexList.length && {
+        $or: [
+          { user_first_name: { $in: searchRegexList } },
+          { user_last_name: { $in: searchRegexList } },
+          { user_email: { $in: searchRegexList } },
+        ],
+      }),
+    };
+
+    const reportingUsers = await userModel
+      .find(baseQuery)
+      .select("uid -_id")
+      .lean();
+    const reportingUIDs = reportingUsers.map((u) => u.uid);
+
+    let finalUIDs = [];
+
+    if (profile === "admin" || profile === "lead manager") {
+      if (permission.length === 0 || permission.includes("All")) {
+        finalUIDs = reportingUIDs;
       } else {
-        return res
-          .status(400)
-          .json({ success: false, error: "Incorrect Profile" });
+        const branchUsers = await getBranchUsers(
+          uid,
+          organization_id,
+          permission
+        );
+        finalUIDs = branchUsers.filter((id) => reportingUIDs.includes(id));
       }
-    } catch (error) {
-      return res.status(400).json({ success: false, error: error.message });
+    } else if (profile === "team lead") {
+      const teamUsers = await getTeamUsers(uid, organization_id);
+      finalUIDs = teamUsers.filter((id) => reportingUIDs.includes(id));
+    } else {
+      // ✅ For other users like sales-profile, allow only their own UID
+      finalUIDs = [uid];
     }
-  } else {
-    return res
-      .status(400)
-      .json({ success: false, error: "some fields are missing" });
-  }
-};
 
-userController.UpdateUserRating = async (req, res) => {
-  let data = req.body;
-  if (data.uid && data.rating && data.rating_given_by) {
-    try {
-      const query = {
-        uid: data.uid,
-      };
-      const update = {
-        user_rating: data.rating,
-        rating_given_by: data.rating_given_by,
-      };
-      const options = {
-        new: true,
-      };
-      const updatedDocument = await userModel.findOneAndUpdate(
-        query,
-        update,
-        options
-      );
-      return res.status(200).json({ success: true, data: updatedDocument });
-    } catch (err) {
-      return res.status(400).json({ success: false, error: err });
-    }
-  } else {
-    return res
-      .status(400)
-      .json({ success: false, error: "some fields are missing" });
-  }
-};
-
-userController.GetUserReport = async (req, res) => {
-  // const currentDate = new Date();
-  // const startDateOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-  // const formattedCurrentDate = currentDate.toISOString().slice(0, 10);
-  // const formattedStartDateOfMonth = startDateOfMonth.toISOString().slice(0, 10);
-  const startOfMonth = moment().startOf("month").toDate();
-  let startDate = startOfMonth;
-  let endDate = moment().toDate();
-  let data = req.body;
-  if (data.uid) {
-    try {
-      const callsQuery = {
-        uid: data.uid,
-        created_at: {
-          $gte: moment(startDate).utcOffset("+05:30").toDate(),
-          $lte: moment(endDate).utcOffset("+05:30").toDate(),
-        },
-      };
-      const wonQuery = {
-        uid: data.uid,
-        stage: "WON",
-        stage_change_at: {
-          $gte: moment(startDate).utcOffset("+05:30").toDate(),
-          $lte: moment(endDate).utcOffset("+05:30").toDate(),
-        },
-      };
-      const interestedQuery = {
-        uid: data.uid,
-        stage: "INTERESTED",
-        stage_change_at: {
-          $gte: moment(startDate).utcOffset("+05:30").toDate(),
-          $lte: moment(endDate).utcOffset("+05:30").toDate(),
-        },
-      };
-      const missedQuery = {
-        uid: data.uid,
-        status: "Pending",
-        due_date: { $lt: moment(endDate).utcOffset("+05:30").toDate() },
-      };
-      const meetingsQuery = {
-        uid: data.uid,
-        type: {
-          $in: ["Site Visit", "Meeting"],
-        },
-        status: "Completed",
-        completed_at: {
-          $gte: moment(startDate).utcOffset("+05:30").toDate(),
-          $lte: moment(endDate).utcOffset("+05:30").toDate(),
-        },
-      };
-      const callsTotal = await callLogsModel.countDocuments(callsQuery);
-      const wonTotal = await leadsModel.countDocuments(wonQuery);
-      const interestedTotal = await leadsModel.countDocuments(interestedQuery);
-      const missedTotal = await taskModel.countDocuments(missedQuery);
-      const meetingsTotal = await taskModel.countDocuments(meetingsQuery);
+    if (finalUIDs.length === 0) {
+      logger.info("⚠️ No matching users found after filtering");
       return res.status(200).json({
+        status: 200,
         success: true,
-        data: {
-          totalCalls: callsTotal,
-          totalWon: wonTotal,
-          totalInterested: interestedTotal,
-          totalMissed: missedTotal,
-          totalMeetings: meetingsTotal,
-        },
+        count: 0,
+        message: "No users matched the criteria.",
+        data: [],
       });
-    } catch (err) {
-      return res.status(400).json({ success: false, error: err });
     }
-  } else {
-    return res
-      .status(400)
-      .json({ success: false, error: "some fields are missing" });
+    const finalQuery = {
+      status: { $regex: "^active$", $options: "i" }, // case-insensitive exact match
+      uid: { $in: finalUIDs },
+    };
+
+    const userData = await userModel.find(finalQuery).limit(10).lean();
+
+    logger.info(`✅ ${userData.length} users retrieved successfully`);
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      count: userData.length,
+      message: "User list fetched successfully.",
+      data: userData,
+    });
+  } catch (error) {
+    logger.error("❌ Error fetching user list", error);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
   }
 };
 
-userController.fetchSpecificData = async (req, res) => {
-  let apiStart = new Date();
-  let projection = {
-    employee_id: 1,
-    user_first_name: 1,
-    user_last_name: 1,
-    user_email: 1,
-  };
-  let timeTakenOverall;
+/**
+ * Update UserRating of users
+ */
+userController.UpdateUserRating = async (req, res) => {
+  const { uid, rating, rating_given_by } = req.body; // Destructure input
 
-  let Employee_id = [];
-  let Employee_Name = [];
-  const uid = req.body.uid;
-
-  let resultUser = await userModel.find({ uid });
-  let query1 = new Date();
-  let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
-  console.log(
-    `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
-  );
-
-  if (!resultUser) {
+  // Validate input data
+  if (!uid || !rating || !rating_given_by) {
+    logger.warn("⚠️ Missing required fields: uid, rating, or rating_given_by");
     return res.status(400).json({
+      status: 400,
       success: false,
-      error: "resultUser not found",
+      message: "Missing required fields: uid, rating, or rating_given_by",
     });
   }
 
-  const user = resultUser && resultUser[0];
-  const profile = user && user?.profile;
-  const organization_id = user && user?.organization_id;
-
-  if (
-    profile.toLowerCase() == "lead manager" ||
-    profile.toLowerCase() == "admin"
-  ) {
-    const permission = user.branchPermission;
-
-    if (
-      permission === undefined ||
-      (permission && permission.length === 0) ||
-      (permission && permission.includes("All"))
-    ) {
-      try {
-        const user = await userModel.find(
-          { organization_id: organization_id },
-          projection
-        );
-        let query1 = new Date();
-        let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
-        console.log(
-          `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
-        );
-
-        user.forEach((val) => {
-          const { employee_id, user_first_name, user_last_name, user_email } =
-            val;
-
-          if (employee_id) {
-            // Employee_id.push({[employee_id]:uid});
-            Employee_id.push({ label: employee_id, value: user_email });
-          }
-          const temp = user_first_name + " " + user_last_name;
-          //  if(!temp){}
-          //  Employee_Name.push({[temp]:uid});
-          Employee_Name.push({ label: temp, value: user_email });
-        });
-
-        let apiEnd = new Date();
-        timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
-        console.log(
-          `api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`
-        );
-        return res.status(200).json({
-          success: true,
-          data: { Employee_id, Employee_Name },
-        });
-      } catch (error) {
-        return res.status(500).json({
-          success: false,
-          error: error,
-        });
-      }
-    } else {
-      try {
-        // let usersList = await getBranchUsers(
-        //   uid,
-        //   organization_id,
-        //   permission
-        // );
-
-        const user = await userModel.find(
-          { organization_id: organization_id, branch: { $in: permission } },
-          projection
-        );
-        let query1 = new Date();
-        let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
-        console.log(
-          `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
-        );
-
-        user.forEach((val) => {
-          const { employee_id, user_first_name, user_last_name, user_email } =
-            val;
-
-          if (employee_id) {
-            // Employee_id.push({[employee_id]:uid});
-            Employee_id.push({ label: employee_id, value: user_email });
-          }
-          const temp = user_first_name + " " + user_last_name;
-          //  if(!temp){}
-          //  Employee_Name.push({[temp]:uid});
-          Employee_Name.push({ label: temp, value: user_email });
-        });
-
-        let apiEnd = new Date();
-        timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
-        console.log(
-          `api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`
-        );
-        return res.status(200).json({
-          success: true,
-          data: { Employee_id, Employee_Name },
-        });
-      } catch (error) {
-        return res.status(500).json({
-          success: false,
-          error: error,
-        });
-      }
-    }
-  } else if (
-    profile.toLowerCase() === "team lead" ||
-    profile.toLowerCase() === "team leader"
-  ) {
-    try {
-      // let usersList = await getTeamUsers(
-      //   uid,
-      //   organization_id
-      // );
-
-      const user = await userModel.find(
-        { organization_id, reporting_to: resultUser[0].user_email },
-        projection
-      );
-      let query1 = new Date();
-      let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
-      console.log(
-        `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
-      );
-
-      user.forEach((val) => {
-        const { employee_id, user_first_name, user_last_name, user_email } =
-          val;
-
-        if (employee_id) {
-          // Employee_id.push({[employee_id]:uid});
-          Employee_id.push({ label: employee_id, value: user_email });
-        }
-        const temp = user_first_name + " " + user_last_name;
-        //  if(!temp){}
-        //  Employee_Name.push({[temp]:uid});
-        Employee_Name.push({ label: temp, value: user_email });
-      });
-
-      let apiEnd = new Date();
-      timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
-      console.log(
-        `api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`
-      );
-
-      return res.status(200).json({
-        success: true,
-        data: { Employee_id, Employee_Name },
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-        error: error,
-      });
-    }
-  } else {
-    try {
-      const user = await userModel.find({ uid: uid }, projection);
-      let query1 = new Date();
-      let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
-      console.log(
-        `api endpoint - /users/fetchSpecificData, time taken for userCollectionQuery, ${timeTakenQuery1}`
-      );
-
-      user.forEach((val) => {
-        const { employee_id, user_first_name, user_last_name, user_email } =
-          val;
-
-        if (employee_id) {
-          // Employee_id.push({[employee_id]:uid});
-          Employee_id.push({ label: employee_id, value: user_email });
-        }
-        const temp = user_first_name + " " + user_last_name;
-        //  if(!temp){}
-        //  Employee_Name.push({[temp]:uid});
-        Employee_Name.push({ label: temp, value: user_email });
-      });
-
-      let apiEnd = new Date();
-      timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
-      console.log(
-        `api endpoint - /users/fetchSpecificData, time taken overall, ${timeTakenOverall}`
-      );
-
-      return res.status(200).json({
-        success: true,
-        data: { Employee_id, Employee_Name },
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-        error: error,
-      });
-    }
-  }
-};
-
-userController.getUserDetail = async (req, res) => {
   try {
-    const data = req.body;
-    if (!data.uid) {
-      return res.status(400).json({ error: "UID is required" });
-    }
-    const results = await userModel.find({ uid: data.uid });
+    // Query to find the user by UID
+    const query = { uid };
+    const update = {
+      user_rating: rating,
+      rating_given_by,
+    };
+    const options = { new: true }; // Return updated document
 
-    if (results.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+    // Update the user document
+    const updatedDocument = await userModel.findOneAndUpdate(
+      query,
+      update,
+      options
+    );
+
+    // Check if document was found and updated
+    if (!updatedDocument) {
+      logger.warn(`❌ User with UID: ${uid} not found for rating update`);
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: `User with UID: ${uid} not found.`,
+      });
     }
 
-    return res.status(200).json(results);
+    // Success response
+    logger.info(`✅ User rating updated successfully for UID: ${uid}`);
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: "User rating updated successfully.",
+      data: updatedDocument,
+    });
   } catch (err) {
-    console.error("Error fetching user details:", err);
-    return res.status(500).json({ error: "Internal server error" });
+    // Log error and return failure response
+    logger.error("❌ Error updating user rating", err);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal Server Error",
+      error: err.message,
+    });
   }
 };
 
+/**
+ *  GetUserReport of users Data
+ */
+userController.GetUserReport = async (req, res) => {
+  const { uid } = req.query;
+
+  if (!uid) {
+    logger.warn("⚠️ Missing required query parameter: uid");
+    return res.status(400).json({
+      status: 400,
+      success: false,
+      message: "Missing required query parameter: uid",
+    });
+  }
+
+  try {
+    const startDate = moment().startOf("month").utcOffset("+05:30").toDate();
+    const endDate = moment().utcOffset("+05:30").toDate();
+
+    const dateRange = {
+      $gte: startDate,
+      $lte: endDate,
+    };
+
+    // Define all queries in parallel
+    const [totalCalls, totalWon, totalInterested, totalMissed, totalMeetings] =
+      await Promise.all([
+        callLogsModel.countDocuments({
+          uid,
+          created_at: dateRange,
+        }),
+        leadsModel.countDocuments({
+          uid,
+          stage: "WON",
+          stage_change_at: dateRange,
+        }),
+        leadsModel.countDocuments({
+          uid,
+          stage: "INTERESTED",
+          stage_change_at: dateRange,
+        }),
+        taskModel.countDocuments({
+          uid,
+          status: "Pending",
+          due_date: { $lt: endDate },
+        }),
+        taskModel.countDocuments({
+          uid,
+          type: { $in: ["Site Visit", "Meeting"] },
+          status: "Completed",
+          completed_at: dateRange,
+        }),
+      ]);
+
+    logger.info(`📈 Report generated for UID: ${uid}`);
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: "User report generated successfully.",
+      data: {
+        totalCalls,
+        totalWon,
+        totalInterested,
+        totalMissed,
+        totalMeetings,
+      },
+    });
+  } catch (error) {
+    logger.error("❌ Error generating user report", error);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ *  fetchSpecificData of users Data
+ */
+userController.fetchSpecificData = async (req, res) => {
+  const apiStart = new Date();
+  const { uid } = req.query;
+
+  if (!uid) {
+    logger.warn("⚠️ Missing required query parameter: uid");
+    return res.status(400).json({
+      status: 400,
+      success: false,
+      message: "Missing required query parameter: uid",
+    });
+  }
+
+  try {
+    const projection = {
+      employee_id: 1,
+      user_first_name: 1,
+      user_last_name: 1,
+      user_email: 1,
+    };
+
+    const userResult = await userModel.findOne({ uid });
+    const queryTime1 = getTimeDifferenceInSeconds(apiStart, new Date());
+
+    if (!userResult) {
+      logger.warn(`❌ User not found for UID: ${uid}`);
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: `User not found for UID: ${uid}`,
+      });
+    }
+
+    const { profile, organization_id, branchPermission, user_email } =
+      userResult;
+    let query = {};
+
+    if (["lead manager", "admin"].includes(profile.toLowerCase())) {
+      if (
+        !branchPermission ||
+        branchPermission.length === 0 ||
+        branchPermission.includes("All")
+      ) {
+        query = { organization_id };
+      } else {
+        query = { organization_id, branch: { $in: branchPermission } };
+      }
+    } else if (["team lead", "team leader"].includes(profile.toLowerCase())) {
+      query = { organization_id, reporting_to: user_email };
+    } else {
+      query = { uid };
+    }
+
+    const users = await userModel.find(query, projection);
+    const queryTime2 = getTimeDifferenceInSeconds(apiStart, new Date());
+
+    const Employee_id = [];
+    const Employee_Name = [];
+
+    users.forEach(
+      ({ employee_id, user_first_name, user_last_name, user_email }) => {
+        if (employee_id) {
+          Employee_id.push({ label: employee_id, value: user_email });
+        }
+        const fullName = `${user_first_name} ${user_last_name}`;
+        Employee_Name.push({ label: fullName, value: user_email });
+      }
+    );
+
+    const apiEnd = new Date();
+    const totalApiTime = getTimeDifferenceInSeconds(apiStart, apiEnd);
+
+    logger.info(
+      `✅ /fetchSpecificData success | UID: ${uid} | User Count: ${users.length} | DB Query Time: ${queryTime2}s | Total API Time: ${totalApiTime}s`
+    );
+
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: "User data fetched successfully.",
+      data: { Employee_id, Employee_Name },
+    });
+  } catch (error) {
+    logger.error("❌ Error in /fetchSpecificData", error);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ *  getUserDetail of users Data
+ */
+userController.getUserDetail = async (req, res) => {
+  const { uid } = req.query;
+
+  if (!uid) {
+    logger.warn("⚠️ UID query parameter is required");
+    return res.status(400).json({
+      status: 400,
+      success: false,
+      message: "UID query parameter is required",
+    });
+  }
+
+  try {
+    const user = await userModel.findOne({ uid });
+
+    if (!user) {
+      logger.warn(`❌ User not found for UID: ${uid}`);
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: `User not found for UID: ${uid}`,
+      });
+    }
+
+    logger.info(`✅ User detail fetched successfully for UID: ${uid}`);
+    return res.status(200).json({
+      status: 200,
+      success: true,
+      message: "User detail fetched successfully",
+      data: user,
+    });
+  } catch (err) {
+    logger.error("❌ Error fetching user detail:", err);
+    return res.status(500).json({
+      status: 500,
+      success: false,
+      message: "Internal server error",
+      error: err.message,
+    });
+  }
+};
+
+/**
+ *  createUsersInMB of users Data
+ */
 const createUsersInMB = async (
   mobile,
   email,
@@ -1037,104 +966,133 @@ const createUsersInMB = async (
   country,
   super_user_oid
 ) => {
+  const requestData = {
+    ubimobile: mobile,
+    ubiemail: email,
+    ubifname: firstname,
+    ubilname: lastname,
+    ubiusertype: "I", // Individual
+    source: "ReadPro",
+    geoCity: "2624", // static or consider using dynamic from `city` later
+    superuser: super_user_oid,
+  };
+
+  const url = `${MB_URL}/userauthapi/user-registration-mb`;
+
   try {
-    const Url = MB_URL + "/userauthapi/user-registration-mb";
-    const data = {
-      ubimobile: mobile,
-      ubiemail: email,
-      ubifname: firstname,
-      ubilname: lastname,
-      ubiusertype: "I",
-      source: "ReadPro",
-      geoCity: "2624",
-      superuser: super_user_oid,
-    };
-    console.log("data createUsersInMB", data);
-    const response = await axios.post(Url, data, {
+    logger.info("📤 Sending request to create user in MB", {
+      url,
+      requestData,
+    });
+
+    const response = await axios.post(url, requestData, {
       headers: {
         "Content-Type": "application/json",
       },
     });
-    // Return response data
-    console.log("createUsersInMB date : ", new Date());
-    console.log("createUsersInMB from MB", response.data);
-    if (response.data.USERID === undefined) {
-      console.error(
-        "Error calling createUsersInMB API:",
-        response.data.MESSAGE
-      );
-      return false;
+
+    const responseData = response.data;
+
+    if (!responseData || !responseData.USERID) {
+      logger.error("❌ Failed to create user in MB", {
+        message: responseData?.MESSAGE || "No USERID returned",
+        data: responseData,
+      });
+      return {
+        success: false,
+        message: responseData?.MESSAGE || "User creation failed",
+      };
     }
-    return response.data.USERID;
+
+    logger.info("✅ User created successfully in MB", {
+      userId: responseData.USERID,
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
+      success: true,
+      userId: responseData.USERID,
+    };
   } catch (error) {
-    // If an error occurs, handle it here
-    console.error("Error calling createUsersInMB API:", error.message);
-    return false;
+    logger.error("❌ Error calling createUsersInMB API", {
+      error: error.message,
+      stack: error.stack,
+    });
+    return {
+      success: false,
+      message: "Internal error while creating user in MB",
+      error: error.message,
+    };
   }
 };
 
+/**
+ *  createUserWithAuth of users Data
+ */
 userController.createUserWithAuth = async (req, res) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
   let UserInMb = "";
+
   try {
-    const { user_email, contact_no, employee_id, organization_id, profile } =
-      req.body;
+    session.startTransaction();
+    const {
+      user_email,
+      contact_no,
+      employee_id,
+      organization_id,
+      profile,
+      SOID,
+      OID,
+    } = req.body;
 
-    let userAlreadyExistsInReadpro = await userModel.findOne({ user_email });
+    logger.info("📥 Starting user creation", { user_email, organization_id });
 
-    let NoCheck = isMobileNoValid(contact_no);
-
-    if (NoCheck !== true) {
-      await session.abortTransaction();
-      session.endSession();
+    // Email and Mobile Validation
+    const existingUser = await userModel.findOne({ user_email });
+    if (existingUser) {
+      logger.warn("⚠️ User with email already exists", { user_email });
       return res.status(400).json({
-        success: false,
-        message: NoCheck,
-      });
-    }
-    if (userAlreadyExistsInReadpro) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({
+        status: 400,
         success: false,
         message: "Email ID already exists",
       });
     }
 
-    let userAlreadyExistsInOrg = await checkUserExistsInOrganization(
+    const phoneValidation = isMobileNoValid(contact_no);
+    if (phoneValidation !== true) {
+      logger.warn("⚠️ Invalid contact number", { contact_no });
+      return res.status(400).json({
+        status: 400,
+        success: false,
+        message: phoneValidation,
+      });
+    }
+
+    const userExistsInOrg = await checkUserExistsInOrganization(
       organization_id,
       user_email,
       contact_no,
       employee_id
     );
-
-    if (userAlreadyExistsInOrg) {
-      await session.abortTransaction();
-      session.endSession();
+    if (userExistsInOrg) {
+      logger.warn("⚠️ Duplicate user in organization", {
+        user_email,
+        employee_id,
+        contact_no,
+      });
       return res.status(400).json({
+        status: 400,
         success: false,
         message:
           "User with the same contact number, or employee ID already exists in the organization",
       });
     }
-    // if(!req.body.SOID){
-    //   await session.abortTransaction();
-    // session.endSession();
-    //   console.log("Soid Not exist")
-    //   return res.status(400).json({
-    //     success: false,
-    //     message: "Issue in creating user"
-    //   });
-    // }
 
-    const organization = await organizationModel.findOne({
-      organization_id: req.body.organization_id,
-    });
+    const organization = await organizationModel.findOne({ organization_id });
     if (!organization) {
-      await session.abortTransaction();
-      session.endSession();
+      logger.error("❌ Organization not found", { organization_id });
       return res.status(400).json({
+        status: 400,
         success: false,
         message: "Organization not found",
       });
@@ -1142,346 +1100,434 @@ userController.createUserWithAuth = async (req, res) => {
 
     const { city, country } = organization;
 
-    let role = "";
-    if (profile === "Lead Manager") {
-      role = "Lead Manager";
-    } else if (profile === "Team Lead") {
-      role = "Team Lead";
-    } else if (profile === "Sales") {
-      role = "Sales";
-    } else if (profile === "Operation Manager") {
-      role = "Operation Manager";
-    }
+    // Assign role
+    const roleMap = {
+      "Lead Manager": "Lead Manager",
+      "Team Lead": "Team Lead",
+      Sales: "Sales",
+      "Operation Manager": "Operation Manager",
+    };
+    const role = roleMap[profile] || "User";
 
-    console.log("req.body", req.body);
-    defaultPassword = generateDefaultPassword(req.body);
-    let passwordSalt = generateSalt();
-    let hashedPassword = await hashPassword(defaultPassword, passwordSalt);
-    let uid = new ObjectId();
+    // Prepare password
+    const defaultPassword = generateDefaultPassword(req.body);
+    const passwordSalt = generateSalt();
+    const hashedPassword = await hashPassword(defaultPassword, passwordSalt);
+    const uid = new ObjectId();
 
-    if (req.body.SOID) {
-      UserInMb = await createUsersInMB(
-        req.body.contact_no,
-        req.body.user_email,
+    // Create user in MB
+    if (SOID) {
+      const mbResult = await createUsersInMB(
+        contact_no,
+        user_email,
         req.body.user_first_name,
         req.body.user_last_name,
         city,
         country,
-        req.body.SOID
+        SOID
       );
-      console.log("UserInMb", UserInMb);
-      if (UserInMb === false) {
-        await session.abortTransaction();
-        session.endSession();
-        return res.status(400).json({
-          success: false,
-          message: "Failed to create users",
-        });
+
+      if (!mbResult || mbResult === false) {
+        logger.error("❌ Failed to create user in MB", { user_email });
+        throw new Error("Failed to create user in MB");
       }
+
+      UserInMb = mbResult;
     }
 
-    const newUser = await userModel.create(
-      [
-        {
-          contact_no: req.body.contact_no,
-          created_by: req.body.created_by,
-          designation: req.body.designation,
-          branch: req.body.branch,
-          device_id: req.body.device_id,
-          organization_id: req.body.organization_id,
-          profile: req.body.profile,
-          reporting_to: req.body.reporting_to,
-          status: req.body.status,
-          team: req.body.team,
-          uid: uid,
-          user_email: req.body.user_email,
-          user_first_name: req.body.user_first_name,
-          user_image: req.body.user_image,
-          user_last_name: req.body.user_last_name,
-          branchPermission: req.body.branchPermission,
-          leadView: req.body.leadView,
-          group_head_name: req.body.group_head_name,
-          employee_id: req.body.employee_id,
-          password: hashedPassword,
-          passwordSalt: passwordSalt,
-          role: role,
-          first_login: true,
-          user_oid: req.body.OID ? req.body.OID : UserInMb,
-          user_super_oid: req.body.SOID ? req.body.SOID : "",
-        },
-      ],
-      { session }
-    );
+    const newUserPayload = {
+      contact_no,
+      created_by: req.body.created_by,
+      designation: req.body.designation,
+      branch: req.body.branch,
+      device_id: req.body.device_id,
+      organization_id,
+      profile,
+      reporting_to: req.body.reporting_to,
+      status: req.body.status,
+      team: req.body.team,
+      uid,
+      user_email,
+      user_first_name: req.body.user_first_name,
+      user_image: req.body.user_image,
+      user_last_name: req.body.user_last_name,
+      branchPermission: req.body.branchPermission,
+      leadView: req.body.leadView,
+      group_head_name: req.body.group_head_name,
+      employee_id,
+      password: hashedPassword,
+      passwordSalt,
+      role,
+      first_login: true,
+      user_oid: OID || UserInMb,
+      user_super_oid: SOID || "",
+    };
+
+    const [newUser] = await userModel.create([newUserPayload], { session });
 
     await session.commitTransaction();
-    session.endSession();
+    logger.info("✅ User created successfully", { user_email, uid });
+
     return res.status(201).json({
+      status: 201,
       success: true,
       message: "User created successfully",
-      data: {
-        user: newUser[0],
-      },
+      data: { user: newUser },
     });
   } catch (error) {
-    // res.status(400).json({ error: error.message });
+    logger.error("❌ Error during user creation", {
+      error: error.message,
+      stack: error.stack,
+    });
+
     await session.abortTransaction();
-    session.endSession();
-    console.log("error11111", error.message);
-    return res.status(400).json({
+    return res.status(500).json({
+      status: 500,
       success: false,
-      message: "An error occured, Please try again 111111",
+      message: "An error occurred while creating user",
       error: error.message,
     });
+  } finally {
+    session.endSession();
+    logger.info("📤 DB session closed for user creation");
   }
 };
 
+/**
+ *  Update of users Data
+ */
 userController.Update = async (req, res) => {
   try {
-    let updateData = req.body.data;
-    let role = "";
-    if (updateData.profile) {
-      if (updateData.profile === "Lead Manager") {
-        role = "Lead Manager";
-        updateData = {
-          ...updateData,
-          role,
-        };
-      } else if (updateData.profile === "Team Lead") {
-        role = "Team Lead";
-        updateData = {
-          ...updateData,
-          role,
-        };
-      } else if (updateData.profile === "Sales") {
-        role = "Sales";
-        updateData = {
-          ...updateData,
-          role,
-        };
-      } else if (updateData.profile === "Operation Manager") {
-        role = "Operation Manager";
-        updateData = {
-          ...updateData,
-          role,
-        };
-      }
-    }
-    const { organization_id, uid, user_email, contact_no, employee_id } =
-      req.body;
+    const {
+      data: updateDataRaw,
+      organization_id,
+      uid,
+      user_email,
+      contact_no,
+      employee_id,
+    } = req.body;
+
+    logger.info("🔄 User update request received", { uid, organization_id });
 
     if (!organization_id || !uid) {
+      logger.warn("⚠️ Missing organization_id or uid", {
+        organization_id,
+        uid,
+      });
       return res.status(400).json({
+        status: 400,
         success: false,
-        message: "Missing required parameters",
+        message: "Missing required parameters: organization_id or uid",
       });
     }
-    // console.log("akkaka",contact_no,employee_id);
 
+    // Handle profile -> role mapping
+    const roleMap = {
+      "Lead Manager": "Lead Manager",
+      "Team Lead": "Team Lead",
+      Sales: "Sales",
+      "Operation Manager": "Operation Manager",
+    };
+
+    let updateData = { ...updateDataRaw };
+    if (updateData.profile && roleMap[updateData.profile]) {
+      updateData.role = roleMap[updateData.profile];
+    }
+
+    // Validate mobile number
     if (contact_no) {
-      let isMobileValid = isValidMobile(contact_no);
-      // console.log("lop",isMobileValid)
-      if (isMobileValid === false) {
+      const isMobileValid = isValidMobile(contact_no);
+      if (!isMobileValid) {
+        logger.warn("⚠️ Invalid mobile number", { contact_no });
         return res.status(400).json({
+          status: 400,
           success: false,
           message: "Invalid mobile number",
         });
       }
-      let userAlreadyExistsInOrg = await checkMobileNumberExistsInReadpro(
+
+      const contactExists = await checkMobileNumberExistsInReadpro(
         organization_id,
         user_email,
         contact_no,
         employee_id,
         uid
       );
-      if (userAlreadyExistsInOrg) {
+      if (contactExists) {
+        logger.warn("⚠️ Mobile number already exists", { contact_no });
         return res.status(400).json({
+          status: 400,
           success: false,
-          message: "Mobile Number already exists",
+          message: "Mobile number already exists",
         });
       }
     }
 
+    // Validate employee ID
     if (employee_id) {
-      let userAlreadyExistsInOrg = await checkEmployeedIdInReadpro(
+      const employeeExists = await checkEmployeedIdInReadpro(
         organization_id,
         user_email,
         contact_no,
         employee_id,
         uid
       );
-      if (userAlreadyExistsInOrg) {
+      if (employeeExists) {
+        logger.warn("⚠️ Employee ID already exists", { employee_id });
         return res.status(400).json({
+          status: 400,
           success: false,
           message: "Employee ID already exists",
         });
       }
     }
 
-    const user = await userModel.findOneAndUpdate(
+    const updatedUser = await userModel.findOneAndUpdate(
       { organization_id, uid },
       { $set: updateData },
       { new: true }
     );
+
+    if (!updatedUser) {
+      logger.warn("⚠️ User not found for update", { organization_id, uid });
+      return res.status(404).json({
+        status: 404,
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    logger.info("✅ User updated successfully", { uid });
     return res.status(200).json({
+      status: 200,
       success: true,
       message: "User updated successfully",
+      data: updatedUser,
     });
   } catch (error) {
-    return res.status(400).json({
+    logger.error("❌ Error while updating user", {
+      error: error.message,
+      stack: error.stack,
+    });
+    return res.status(500).json({
+      status: 500,
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred while updating user",
       error: error.message,
     });
   }
 };
 
+/**
+ *  FetchAll of users Data
+ */
 userController.FetchAll = async (req, res) => {
+  const apiStart = Date.now();
   try {
-    let apiStart = new Date();
-    let timeTakenOverall;
     const { organization_id } = req.query;
+
     if (!organization_id) {
+      logger.warn("⚠️ Missing organization_id in request query");
       return res.status(400).json({
+        status: 400,
         success: false,
-        message: "Missing required parameters",
-        error: "Missing required parameters",
+        message: "Missing required parameter: organization_id",
       });
     }
 
-    let sort = { created_at: -1 };
+    logger.info(
+      `📦 Fetching all users for organization_id: ${organization_id}`
+    );
+
+    // Projection to exclude sensitive/internal fields
+    const projection = {
+      __v: 0,
+      device_id: 0,
+      session_id: 0,
+      device_type: 0,
+      first_login: 0,
+      fcm_token: 0,
+      is_mobile_updation_declared: 0,
+      user_mb_isd: 0,
+      user_last_login_time: 0,
+      password: 0,
+      passwordSalt: 0,
+      token: 0,
+    };
 
     const usersDataRaw = await userModel
-      .find(
-        { organization_id: organization_id },
-        {
-          __v: 0,
-          device_id: 0,
-          session_id: 0,
-          device_type: 0,
-          first_login: 0,
-          fcm_token: 0,
-          is_mobile_updation_declared: 0,
-          user_mb_isd: 0,
-          user_last_login_time: 0,
-          password: 0,
-          passwordSalt: 0,
-          token: 0,
-        }
-      )
-      .sort(sort)
+      .find({ organization_id }, projection)
+      .sort({ created_at: -1 })
       .lean();
+
     const usersData = usersDataRaw.map((user) => ({
       ...user,
       mb_oid_mapped: user.user_oid ? "Yes" : "No",
     }));
 
-    let query1 = new Date();
-    let timeTakenQuery1 = getTimeDifferenceInSeconds(apiStart, query1);
-    console.log(
-      `api endpoint - users/fetchAll, time taken for query 1, ${timeTakenQuery1}`
-    );
+    const timeTakenMs = Date.now() - apiStart;
+    logger.info(`✅ Fetched ${usersData.length} users in ${timeTakenMs}ms`);
 
-    let apiEnd = new Date();
-    timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
-    console.log(
-      `api endpoint - users/fetchAll, time taken overall, ${timeTakenOverall}`
-    );
     return res.status(200).json({
+      status: 200,
       success: true,
       message: "Users fetched successfully",
-      data: {
-        usersData,
-      },
+      data: { usersData },
     });
   } catch (error) {
-    let apiEnd = new Date();
-    timeTakenOverall = getTimeDifferenceInSeconds(apiStart, apiEnd);
-    console.log(
-      `api endpoint - users/fetchAll, time taken overall, ${timeTakenOverall}`
-    );
-    return res.status(400).json({
+    const timeTakenMs = Date.now() - apiStart;
+    logger.error("❌ Error fetching users", {
+      error: error.message,
+      stack: error.stack,
+      durationMs: timeTakenMs,
+    });
+
+    return res.status(500).json({
+      status: 500,
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred while fetching users",
       error: error.message,
     });
   }
 };
 
+/**
+ *  FetchUser of users Data
+ */
 userController.FetchUser = async (req, res) => {
+  const apiStart = Date.now();
   try {
     const { uid } = req.query;
+
     if (!uid) {
+      logger.warn("⚠️ Missing required parameter: uid");
       return res.status(400).json({
+        status: 400,
         success: false,
-        message: "Missing required parameters",
-        error: "Missing required parameters",
+        message: "Missing required parameter: uid",
       });
     }
 
-    const user = await userModel
-      .findOne({ uid: uid }, { password: 0, passwordSalt: 0 })
-      .lean();
+    logger.info(`📋 Fetching user with UID: ${uid}`);
+
+    const projection = { password: 0, passwordSalt: 0 };
+    const user = await userModel.findOne({ uid }, projection).lean();
+
+    if (!user) {
+      logger.warn(`❌ No user found with UID: ${uid}`);
+      return res.status(404).json({
+        status: 400,
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const durationMs = Date.now() - apiStart;
+    logger.info(`✅ User fetched successfully in ${durationMs}ms`);
 
     return res.status(200).json({
+      status: 200,
       success: true,
       message: "User fetched successfully",
-      data: {
-        user,
-      },
+      data: { user },
     });
   } catch (error) {
-    return res.status(400).json({
+    const durationMs = Date.now() - apiStart;
+    logger.error("❌ Error fetching user", {
+      error: error.message,
+      stack: error.stack,
+      durationMs,
+    });
+
+    return res.status(500).json({
+      status: 500,
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred while fetching user",
       error: error.message,
     });
   }
 };
 
+/**
+ *  FetchReportingUser of users Data
+ */
 userController.FetchReportingUser = async (req, res) => {
+  const apiStart = Date.now();
   try {
     const { user_email } = req.query;
+
     if (!user_email) {
+      logger.warn("⚠️ Missing required parameter: user_email");
       return res.status(400).json({
+        status: 400,
         success: false,
-        message: "Missing required parameters",
-        error: "Missing required parameters",
+        message: "Missing required parameter: user_email",
       });
     }
 
-    const user = await userModel
-      .findOne({ user_email: user_email }, { password: 0, passwordSalt: 0 })
-      .lean();
+    logger.info(`📋 Fetching reporting user by email: ${user_email}`);
+
+    const projection = { password: 0, passwordSalt: 0 };
+    const user = await userModel.findOne({ user_email }, projection).lean();
+
+    if (!user) {
+      logger.warn(`❌ No user found with email: ${user_email}`);
+      return res.status(404).json({
+        status: 400,
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const durationMs = Date.now() - apiStart;
+    logger.info(`✅ Reporting user fetched successfully in ${durationMs}ms`);
 
     return res.status(200).json({
+      status: 200,
       success: true,
       message: "User fetched successfully",
-      data: {
-        user,
-      },
+      data: { user },
     });
   } catch (error) {
-    return res.status(400).json({
+    const durationMs = Date.now() - apiStart;
+    logger.error("❌ Error in FetchReportingUser", {
+      message: error.message,
+      stack: error.stack,
+      durationMs,
+    });
+
+    return res.status(500).json({
+      status: 500,
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred while fetching user",
       error: error.message,
     });
   }
 };
 
+/**
+ *  ResetPasswordForFirstSignIn of users Data
+ */
 userController.ResetPasswordForFirstSignIn = async (req, res) => {
+  const apiStart = Date.now();
   try {
     const { user_email, password } = req.body;
+
+    // Validate required parameters
     if (!user_email || !password) {
+      logger.warn("⚠️ Missing required parameters: user_email or password");
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters",
-        error: "Missing required parameters",
+        message: "Missing required parameters: user_email and password",
+        status: 400,
       });
     }
 
-    let passwordSalt = await generateSalt();
-    let hashedPassword = await hashPassword(password, passwordSalt);
+    logger.info(`🔐 Starting password reset for: ${user_email}`);
+
+    const passwordSalt = await generateSalt();
+    const hashedPassword = await hashPassword(password, passwordSalt);
+
     const user = await userModel.findOneAndUpdate(
       { user_email },
       {
@@ -1494,32 +1540,71 @@ userController.ResetPasswordForFirstSignIn = async (req, res) => {
       { new: true }
     );
 
+    // If user doesn't exist
+    if (!user) {
+      logger.warn(`❌ User not found: ${user_email}`);
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+        status: 404,
+      });
+    }
+
+    const duration = Date.now() - apiStart;
+    logger.info(
+      `✅ Password reset successful for ${user_email} in ${duration}ms`
+    );
+
     return res.status(200).json({
       success: true,
-      message: "Password Updated successfully",
+      message: "Password updated successfully",
+      status: 200,
     });
   } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: "An error occured, Please try again",
+    const duration = Date.now() - apiStart;
+    logger.error("❌ Error during password reset", {
       error: error.message,
+      stack: error.stack,
+      duration,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while resetting the password",
+      error: error.message,
+      status: 500,
     });
   }
 };
 
+/**
+ *  UpdateUserPassword of users Data
+ */
 userController.UpdateUserPassword = async (req, res) => {
+  const apiStart = Date.now();
   try {
     const { organization_id, user_email, new_password } = req.body;
+
+    // Validate required parameters
     if (!organization_id || !user_email || !new_password) {
+      logger.warn(
+        "⚠️ Missing required parameters: organization_id, user_email, or new_password"
+      );
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters",
-        error: "Missing required parameters",
+        message:
+          "Missing required parameters: organization_id, user_email, or new_password",
+        status: 400,
       });
     }
 
+    logger.info(
+      `🔐 Starting password update for ${user_email} in organization ${organization_id}`
+    );
+
     let passwordSalt = await generateSalt();
     let hashedPassword = await hashPassword(new_password, passwordSalt);
+
     const user = await userModel.findOneAndUpdate(
       { organization_id, user_email },
       {
@@ -1531,15 +1616,41 @@ userController.UpdateUserPassword = async (req, res) => {
       { new: true }
     );
 
+    // If user doesn't exist
+    if (!user) {
+      logger.warn(
+        `❌ User not found: ${user_email} in organization ${organization_id}`
+      );
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+        status: 404,
+      });
+    }
+
+    const duration = Date.now() - apiStart;
+    logger.info(
+      `✅ Password updated successfully for ${user_email} in organization ${organization_id} in ${duration}ms`
+    );
+
     return res.status(200).json({
       success: true,
-      message: "Password Updated successfully",
+      message: "Password updated successfully",
+      status: 200,
     });
   } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: "An error occured, Please try again",
+    const duration = Date.now() - apiStart;
+    logger.error("❌ Error during password update", {
       error: error.message,
+      stack: error.stack,
+      duration,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred while updating the password",
+      error: error.message,
+      status: 500,
     });
   }
 };
