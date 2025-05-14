@@ -1,9 +1,9 @@
 const express = require("express");
-const logger = require("../services/logger"); // ensure correct path to your logger file
+const logger = require("../services/logger"); // Ensure correct path to your logger file
 const userController = require("../controllers/usersController");
 const router = express.Router();
 
-// Destructure controller functions
+// Destructure controller functions for cleaner usage
 const {
   Insert,
   GetUser,
@@ -30,152 +30,147 @@ const {
   verifyNumberInDb,
 } = userController;
 
-// 🧪 Test route
+/**
+ * Utility function to handle async routes gracefully while ensuring logging at all stages.
+ */
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Success`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+/**
+ * 🧪 Test Route
+ */
 router.get("/", (req, res) => {
-  logger.info("🟢 /users - Hit test route");
-  res.send("you are in users");
+  logger.info("🟢 /users - Test route hit");
+  res.send("You are in users");
 });
 
-// 👤 Create a new user
-router.post("/newUser", (req, res, next) => {
-  logger.info("📩 /newUser - Creating new user");
-  Insert(req, res, next);
-});
+/**
+ * 👤 Create a new user
+ */
+router.post("/newUser", asyncHandler(Insert));
 
-// 🔍 Fetch user based on filters or input
-router.get("/getUser", (req, res, next) => {
-  logger.info("🔍 /getUser - Fetching user based on query parameters");
-  GetUser(req, res, next);
-});
+/**
+ * 🔍 Fetch user based on query parameters
+ */
+router.get("/getUser", asyncHandler(GetUser));
 
-// 🔍 Find users by organization ID
-router.get("/findByOrganizationId", (req, res, next) => {
-  logger.info("🔎 /findByOrganizationId - Searching users by organization");
-  findByOrgan_ID(req, res, next);
-});
+/**
+ * 🔎 Find users by organization ID
+ */
+router.get("/findByOrganizationId", asyncHandler(findByOrgan_ID));
 
-// ✏️ Update user data
-router.put("/updateData", (req, res, next) => {
-  logger.info("✏️ /updateData - Updating user data");
-  updateData(req, res, next);
-});
+/**
+ * ✏️ Update user data
+ */
+router.put("/updateData", asyncHandler(updateData));
 
-// 🆔 Find user by UID
-router.get("/findByUID", (req, res, next) => {
-  logger.info("🆔 /findByUID - Finding user by UID");
-  FindByUid(req, res, next);
-});
+/**
+ * 🆔 Find user by UID
+ */
+router.get("/findByUID", asyncHandler(FindByUid));
 
-// 📄 Get a list of users
-router.get("/getUsersList", (req, res, next) => {
-  logger.info("📄 /getUsersList - Fetching users list");
-  GetUsersList(req, res, next);
-});
+/**
+ * 📄 Fetch list of all users
+ */
+router.get("/getUsersList", asyncHandler(GetUsersList));
 
-// ⭐ Update user rating
-router.put("/updateUserRating", (req, res, next) => {
-  logger.info("⭐ /updateUserRating - Updating user rating");
-  UpdateUserRating(req, res, next);
-});
+/**
+ * ⭐ Update user rating
+ */
+router.put("/updateUserRating", asyncHandler(UpdateUserRating));
 
-// 📊 Generate user report
-router.get("/getUserReport", (req, res, next) => {
-  logger.info("📊 /getUserReport - Generating user report");
-  GetUserReport(req, res, next);
-});
+/**
+ * 📊 Generate a user report
+ */
+router.get("/getUserReport", asyncHandler(GetUserReport));
 
-// 🔍 Fetch specific user data
-router.get("/fetchSpecificData", (req, res, next) => {
-  logger.info("🔍 /fetchSpecificData - Fetching specific user data");
-  fetchSpecificData(req, res, next);
-});
+/**
+ * 🔍 Fetch specific user-related data
+ */
+router.get("/fetchSpecificData", asyncHandler(fetchSpecificData));
 
-// 📋 Get user detail
-router.get("/getUserDetail", (req, res, next) => {
-  logger.info("📋 /getUserDetail - Fetching user detail");
-  getUserDetail(req, res, next);
-});
+/**
+ * 📋 Get user detail
+ */
+router.get("/getUserDetail", asyncHandler(getUserDetail));
 
-// 🔐 Create user with authentication
-router.post("/createUserWithAuth", (req, res, next) => {
-  logger.info("🔐 /createUserWithAuth - Creating user with auth");
-  createUserWithAuth(req, res, next);
-});
+/**
+ * 🔐 Create user with authentication
+ */
+router.post("/createUserWithAuth", asyncHandler(createUserWithAuth));
 
-// 🔄 Update a user record
-router.put("/update", (req, res, next) => {
-  logger.info("🔄 /update - Updating user record");
-  Update(req, res, next);
-});
+/**
+ * 🔄 Update an existing user record
+ */
+router.put("/update", asyncHandler(Update));
 
-// 📦 Fetch all users
-router.get("/fetchAll", (req, res, next) => {
-  logger.info("📦 /fetchAll - Fetching all users");
-  FetchAll(req, res, next);
-});
+/**
+ * 📦 Fetch all users
+ */
+router.get("/fetchAll", asyncHandler(FetchAll));
 
-// 🔍 Fetch single user
-router.get("/fetchUser", (req, res, next) => {
-  logger.info("👤 /fetchUser - Fetching one user");
-  FetchUser(req, res, next);
-});
+/**
+ * 🔍 Fetch single user
+ */
+router.get("/fetchUser", asyncHandler(FetchUser));
 
-// 📑 Get users under reporting structure
-router.get("/fetchReportingUser", (req, res, next) => {
-  logger.info("📑 /fetchReportingUser - Fetching reporting users");
-  FetchReportingUser(req, res, next);
-});
+/**
+ * 📑 Get users under reporting structure
+ */
+router.get("/fetchReportingUser", asyncHandler(FetchReportingUser));
 
-// 🔒 First sign-in password reset
-router.post("/resetPasswordForFirstSignIn", (req, res, next) => {
-  logger.info(
-    "🔒 /resetPasswordForFirstSignIn - Resetting password for first sign-in"
-  );
-  ResetPasswordForFirstSignIn(req, res, next);
-});
+/**
+ * 🔒 Reset password for first-time sign-in users
+ */
+router.post(
+  "/resetPasswordForFirstSignIn",
+  asyncHandler(ResetPasswordForFirstSignIn)
+);
 
-// 🔑 Update password for user
-router.post("/updateUserPassword", (req, res, next) => {
-  logger.info("🔑 /updateUserPassword - Updating user password");
-  UpdateUserPassword(req, res, next);
-});
+/**
+ * 🔑 Update user password
+ */
+router.post("/updateUserPassword", asyncHandler(UpdateUserPassword));
 
-// 📤 Import users in bulk
-router.post("/importUsers", (req, res, next) => {
-  logger.info("📤 /importUsers - Importing users");
-  ImportUsers(req, res, next);
-});
+/**
+ * 📤 Bulk import users
+ */
+router.post("/importUsers", asyncHandler(ImportUsers));
 
-// 👥 Create sub-user under a parent user
-router.post("/createSubUser", (req, res, next) => {
-  logger.info("👥 /createSubUser - Creating sub-user");
-  CreateSubUser(req, res, next);
-});
+/**
+ * 👥 Create a sub-user under a parent user
+ */
+router.post("/createSubUser", asyncHandler(CreateSubUser));
 
-// 📲 Send OTP before updating mobile
-router.post("/sendOtpBeforeUpdatingMobile", (req, res, next) => {
-  logger.info(
-    "📲 /sendOtpBeforeUpdatingMobile - Sending OTP before mobile update"
-  );
-  SendOtpBeforeUpdatingMobile(req, res, next);
-});
+/**
+ * 📲 Send OTP before updating mobile number
+ */
+router.post(
+  "/sendOtpBeforeUpdatingMobile",
+  asyncHandler(SendOtpBeforeUpdatingMobile)
+);
 
-// ✅ Verify OTP and update user contact
-router.post("/verifyOtpAndUpdateUser", (req, res, next) => {
-  logger.info("✅ /verifyOtpAndUpdateUser - Verifying OTP & updating user");
-  VerifyOtpAndUpdateUser(req, res, next);
-});
+/**
+ * ✅ Verify OTP and update user contact details
+ */
+router.post("/verifyOtpAndUpdateUser", asyncHandler(VerifyOtpAndUpdateUser));
 
-// 🔄 Update contact number from MMB (mobile-based modification)
-router.post("/updateUserContactMMB", (req, res, next) => {
-  logger.info("🔄 /updateUserContactMMB - Updating contact from MMB");
-  updateContactNumberFromMB(req, res, next);
-});
+/**
+ * 🔄 Update contact number from Mobile Modification Base (MMB)
+ */
+router.post("/updateUserContactMMB", asyncHandler(updateContactNumberFromMB));
 
-// 🕵️ Verify number in database
-router.get("/verifyNum", (req, res, next) => {
-  logger.info("🕵️ /verifyNum - Verifying mobile number in DB");
-  verifyNumberInDb(req, res, next);
-});
+/**
+ * 🕵️ Verify mobile number in the database
+ */
+router.get("/verifyNum", asyncHandler(verifyNumberInDb));
 
 module.exports = router;
