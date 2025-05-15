@@ -1,59 +1,26 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const projectResourcesSchema = new mongoose.Schema({
-
-  organization_id: {
-    type: String,
-    default: "",
-    required: true
+const projectResourcesSchema = new mongoose.Schema(
+  {
+    organization_id: { type: String, default: "", required: true },
+    project_id: { type: String, default: "", required: true },
+    project_name: { type: String, default: "" },
+    images: { type: Array, default: [] },
+    videos: { type: Array, default: [] },
+    brochures: { type: Array, default: [] },
+    pricelists: { type: Array, default: [] },
+    layouts: { type: Array, default: [] },
+    forms: { type: Array, default: [] },
+    project_description: { type: String, default: "" },
+    project_map_url: { type: String, default: "" },
   },
-  project_id: {
-    type: String,
-    default: "",
-    required: true
-  },
-  project_name: {
-    type: String,
-    default: ""
-  },
-  images: {
-    type: Array,
-    default: []
-  },
-  videos: {
-    type: Array,
-    default: []
-  },
-  brochures: {
-    type: Array,
-    default: []
-  },
-  pricelists: {
-    type: Array,
-    default: []
-  },
-  layouts: {
-    type: Array,
-    default: []
-  },
-  forms: {
-    type: Array,
-    default: []
-  },
-  project_description: {
-    type: String,
-    default: ""
-  },
-  project_map_url: {
-    type: String,
-    default: ""
+  {
+    timestamps: { createdAt: "created_at", updatedAt: "updated_at" }, // Correct timestamp naming
   }
-}, {
-  timestamps: true
-})
+);
 
 const projectResoModel = mongoose.model(
-  'projectResources',
+  "projectResources",
   projectResourcesSchema
 );
 
