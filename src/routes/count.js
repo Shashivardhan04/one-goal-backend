@@ -1,90 +1,43 @@
-const express = require('express');
-const countController = require('../controllers/countController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure the logger is properly imported
+const countController = require("../controllers/countController");
+const router = express.Router();
 
+// Destructuring controller functions for cleaner usage
 const { Count } = countController;
 
 /**
- * @openapi
- * /count:
- *   get:
- *     summary: Get count 
- *     description: Retrieve information about count .
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   description: A message indicating you are in counts.
- *             example:
- *               message: "you are in counts"
- *     tags:
- *       - count
+ * Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.get('/', (req, res) => res.send('you are in counts'));
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      status: 500,
+    });
+  }
+};
 
 /**
- * @openapi
- * /count/Count:
- *   post:
- *     summary: Count Items
- *     description: Count items based on specific criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               criteria:
- *                 type: string
- *                 description: The criteria for counting items.
- *             example:
- *               criteria: "your-count-criteria"
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 count:
- *                   type: integer
- *                   description: The count of items based on the criteria.
- *             example:
- *               success: true
- *               count: 42
- *     tags:
- *       - count
+ * 🧪 Health Check Route
+ * Confirms that the Count API is accessible.
  */
-router.post('/Count', Count);
+router.get("/", (req, res) => {
+  logger.info("🟢 /counts - Health check route hit");
+  res.send("You are in counts");
+});
 
+/**
+ * 📊 Count Data
+ * Processes count-related data, ensuring validation and error handling.
+ */
+router.post("/Count", asyncHandler(Count));
 
 module.exports = router;
