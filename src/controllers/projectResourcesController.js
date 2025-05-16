@@ -1,281 +1,295 @@
-var ObjectId = require('mongoose').Types.ObjectId;
+var ObjectId = require("mongoose").Types.ObjectId;
 
-const projectResoucesModel = require('../models/projectResourcesSchema');
-const userAuthorizationModel = require('../models/userAuthorizationSchema.js');
+const projectResoucesModel = require("../models/projectResourcesSchema");
+const userAuthorizationModel = require("../models/userAuthorizationSchema.js");
+const logger = require("../services/logger");
 
-module.exports = {
+const projectResourcesController = {};
 
-  AddAttachment: async (req, res) => {
-    try {
-      const { project_id, organization_id, attachment, resource_type } = req.body;
-      let update;
-      if (resource_type === "images") {
-        update = {
-          $push: {
-            images: {
-              ...attachment,
-              created_at: new Date()
-            }
-          },
-        };
-      }
-      else if (resource_type === "videos") {
-        update = {
-          $push: {
-            videos: {
-              ...attachment,
-              created_at: new Date()
-            }
-          },
-        };
-      }
-      else if (resource_type === "brochures") {
-        update = {
-          $push: {
-            brochures: {
-              ...attachment,
-              created_at: new Date()
-            }
-          },
-        };
-      }
-      else if (resource_type === "pricelists") {
-        update = {
-          $push: {
-            pricelists: {
-              ...attachment,
-              created_at: new Date()
-            }
-          },
-        };
-      }
-      else if (resource_type === "layouts") {
-        update = {
-          $push: {
-            layouts: {
-              ...attachment,
-              created_at: new Date()
-            }
-          },
-        };
-      }
-      else if (resource_type === "forms") {
-        update = {
-          $push: {
-            forms: {
-              ...attachment,
-              created_at: new Date()
-            }
-          },
-        };
-      }
-      const query = {
-        organization_id,
-        project_id,
-      };
-      const options = {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true
-      };
-      await projectResoucesModel.findOneAndUpdate(query, update, options);
-      return res.status(200).json({
-        success: true,
-        message: "Project resource added",
-      });
-    } catch (error) {
+/**
+ * 📌 Add Attachment
+ * Adds a new attachment to the specified project resource.
+ */
+projectResourcesController.AddAttachment = async (req, res) => {
+  try {
+    const { project_id, organization_id, attachment, resource_type } = req.body;
+
+    /** 🛑 Validate required fields */
+    if (!project_id || !organization_id || !attachment || !resource_type) {
+      logger.warn("⚠️ Missing required fields for AddAttachment");
       return res.status(400).json({
         success: false,
-        message: "An error occured, Please try again",
-        error: error.message,
+        message: "Some fields are missing",
+        status: 400,
       });
     }
-  },
-  RemoveAttachment: async (req, res) => {
-    try {
-      const { project_id, organization_id, attachment, resource_type } = req.body;
-      const query = {
-        organization_id,
-        project_id,
-      };
-      let attachments = await projectResoucesModel.findOne(query);
-      let updatedAttachments = attachments[resource_type].filter((item) => {
-        return item.link !== attachment.link;
-      })
-      let update;
-      if (resource_type === "images") {
-        update = {
-          images: updatedAttachments
-        };
-      }
-      else if (resource_type === "videos") {
-        update = {
-          videos: updatedAttachments
-        };
-      }
-      else if (resource_type === "brochures") {
-        update = {
-          brochures: updatedAttachments
-        };
-      }
-      else if (resource_type === "pricelists") {
-        update = {
-          pricelists: updatedAttachments
-        };
-      }
-      else if (resource_type === "layouts") {
-        update = {
-          layouts: updatedAttachments
-        };
-      }
-      else if (resource_type === "forms") {
-        update = {
-          forms: updatedAttachments
-        };
-      }
-      const options = {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true
-      };
-      await projectResoucesModel.findOneAndUpdate(query, update, options);
-      return res.status(200).json({
-        success: true,
-        message: "Project resource deleted",
-      });
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        message: "An error occured, Please try again",
-        error: error.message,
-      });
-    }
-  },
 
-  Update: async (req, res) => {
-    try {
-      const userPreference = await userAuthorizationModel.findOne({ uid: req.body.userAuthorizationId });
-      if (userPreference && userPreference.project_attachments_create_approved === false) {
-        return res.status(400).json({ success: false, message: "You are not allowed to add attachment . Please contact your admin" });
-      }
-      const { organization_id, project_id } = req.body;
+    logger.info(
+      `📡 Adding ${resource_type} attachment to project ID: ${project_id}`
+    );
 
-      if (!organization_id || !project_id) {
-        return res.status(400).json({
-          success: false,
-          error: "Some fields are missing"
-        });
-      }
-      const query = {
-        organization_id: organization_id,
-        project_id: project_id
-      }
+    /** 🔄 Prepare update object */
+    const update = {
+      $push: { [resource_type]: { ...attachment, created_at: new Date() } },
+    };
+    const query = { organization_id, project_id };
+    const options = { new: true, upsert: true, setDefaultsOnInsert: true };
 
-      const options = {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true
-      };
-      const project = await projectResoucesModel.findOne(query);
+    /** 🚀 Execute update */
+    await projectResourcesModel.findOneAndUpdate(query, update, options);
 
-      if (project) {
-        let obj = { ...req.body };
-
-        delete obj.project_id;
-        const update = {
-          $set: obj
-        }
-
-        const updatedProject = await projectResoucesModel.findOneAndUpdate(query, update, options);
-
-        return res.status(200).json({
-          success: true,
-          message: "Project resource added",
-          data: updatedProject
-        });
-      } else {
-
-        const project = await projectResoucesModel.create(req.body);
-        return res.status(200).json({
-          success: true,
-          message: "Project resource added",
-          data: project
-        });
-
-      }
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        message: "An error occured, Please try again",
-        error: error.message,
-      });
-    }
-  },
-  Delete: async (req, res) => {
-    try {
-      const userPreference = await userAuthorizationModel.findOne({ uid: req.body.userAuthorizationId });
-      if (userPreference && userPreference.project_attachments_delete_approved === false) {
-        return res.status(400).json({ success: false, message: "You are not allowed to delete attachment . Please contact your admin" });
-      }
-      const { project_id } = req.body;
-      if (!project_id) {
-        return res.status(400).json({
-          success: false,
-          error: "Some fields are missing"
-        });
-      }
-
-      let obj = { ...req.body };
-
-
-      delete obj.project_id;
-      //  console.log(obj);
-
-
-
-      const project = await projectResoucesModel.findOneAndUpdate({ project_id: project_id }, { $unset: obj });
-
-
-
-      return res.status(200).json({ success: true, data: project });
-
-    } catch (error) {
-      res.status(400).json({
-        success: false,
-        error: error
-      })
-    }
-  },
-
-  GetData: async (req, res) => {
-    try {
-      const { project_id, organization_id } = req.body;
-
-      if (!project_id || !organization_id) {
-        return res.status(400).json({
-          success: false,
-          error: "Some fields are missing"
-        });
-      }
-
-      let query = {
-        organization_id,
-        project_id
-      }
-      const project = await projectResoucesModel.findOne(query);
-      return res.status(200).json({
-        success: true,
-        message: "Project resources fetched successfully",
-        data: project
-      });
-    } catch (error) {
-      return res.status(400).json({
-        success: false,
-        message: "An error occured, Please try again",
-        error: error.message,
-      });
-    }
+    logger.info(
+      `✅ Attachment added successfully to project ID: ${project_id}`
+    );
+    return res
+      .status(200)
+      .json({ success: true, message: "Project resource added", status: 200 });
+  } catch (error) {
+    logger.error(
+      `❌ Error adding attachment to project ID ${req.body.project_id}: ${error.message}`
+    );
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred, Please try again",
+      error: error.message,
+      status: 500,
+    });
   }
+};
 
+/**
+ * 🗑️ Remove Attachment
+ * Removes an attachment from the specified project resource.
+ */
+projectResourcesController.RemoveAttachment = async (req, res) => {
+  try {
+    const { project_id, organization_id, attachment, resource_type } = req.body;
 
-}
+    /** 🛑 Validate required fields */
+    if (!project_id || !organization_id || !attachment || !resource_type) {
+      logger.warn("⚠️ Missing required fields for RemoveAttachment");
+      return res.status(400).json({
+        success: false,
+        message: "Some fields are missing",
+        status: 400,
+      });
+    }
+
+    logger.info(
+      `📡 Removing ${resource_type} attachment from project ID: ${project_id}`
+    );
+
+    /** 🔄 Retrieve existing attachments */
+    const projectData = await projectResourcesModel.findOne({
+      organization_id,
+      project_id,
+    });
+    if (!projectData) {
+      logger.warn(`⚠️ Project not found for ID: ${project_id}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "Project not found", status: 404 });
+    }
+
+    /** 🔄 Filter out attachment */
+    const updatedAttachments = projectData[resource_type].filter(
+      (item) => item.link !== attachment.link
+    );
+    const update = { [resource_type]: updatedAttachments };
+    const options = { new: true };
+
+    /** 🚀 Execute update */
+    await projectResourcesModel.findOneAndUpdate(
+      { organization_id, project_id },
+      update,
+      options
+    );
+
+    logger.info(
+      `✅ Attachment removed successfully from project ID: ${project_id}`
+    );
+    return res.status(200).json({
+      success: true,
+      message: "Project resource deleted",
+      status: 200,
+    });
+  } catch (error) {
+    logger.error(
+      `❌ Error removing attachment from project ID ${req.body.project_id}: ${error.message}`
+    );
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred, Please try again",
+      error: error.message,
+      status: 500,
+    });
+  }
+};
+
+/**
+ * 🔄 Update Project Resource
+ * Updates project resource details.
+ */
+projectResourcesController.Update = async (req, res) => {
+  try {
+    /** 🔍 Check user authorization */
+    const userPreference = await userAuthorizationModel.findOne({
+      uid: req.body.userAuthorizationId,
+    });
+    if (
+      userPreference &&
+      userPreference.project_attachments_create_approved === false
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You are not allowed to add attachments. Please contact your admin",
+        status: 403,
+      });
+    }
+
+    const { organization_id, project_id, ...data } = req.body;
+
+    /** 🛑 Validate required fields */
+    if (!organization_id || !project_id) {
+      logger.warn("⚠️ Missing required fields for Update");
+      return res.status(400).json({
+        success: false,
+        message: "Some fields are missing",
+        status: 400,
+      });
+    }
+
+    logger.info(`📡 Updating project resource for ID: ${project_id}`);
+
+    /** 🔄 Prepare update */
+    const query = { organization_id, project_id };
+    const update = { $set: data };
+    const options = { new: true, upsert: true, setDefaultsOnInsert: true };
+
+    /** 🚀 Execute update */
+    const updatedProject = await projectResourcesModel.findOneAndUpdate(
+      query,
+      update,
+      options
+    );
+
+    logger.info(
+      `✅ Project resource updated successfully for ID: ${project_id}`
+    );
+    return res.status(200).json({
+      success: true,
+      message: "Project resource updated",
+      status: 200,
+      data: updatedProject,
+    });
+  } catch (error) {
+    logger.error(
+      `❌ Error updating project ID ${req.body.project_id}: ${error.message}`
+    );
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred, Please try again",
+      error: error.message,
+      status: 500,
+    });
+  }
+};
+
+/**
+ * ❌ Delete Project Resource
+ * Deletes project resource details.
+ */
+projectResourcesController.Delete = async (req, res) => {
+  try {
+    const { project_id, ...data } = req.body;
+
+    /** 🛑 Validate required fields */
+    if (!project_id) {
+      logger.warn("⚠️ Missing required fields for Delete");
+      return res.status(400).json({
+        success: false,
+        message: "Project ID is required",
+        status: 400,
+      });
+    }
+
+    logger.info(`📡 Deleting project resource for ID: ${project_id}`);
+
+    /** 🚀 Execute deletion */
+    const deletedProject = await projectResourcesModel.findOneAndUpdate(
+      { project_id },
+      { $unset: data }
+    );
+
+    logger.info(
+      `✅ Project resource deleted successfully for ID: ${project_id}`
+    );
+    return res.status(200).json({
+      success: true,
+      message: "Project resource deleted",
+      status: 200,
+      data: deletedProject,
+    });
+  } catch (error) {
+    logger.error(
+      `❌ Error deleting project ID ${req.body.project_id}: ${error.message}`
+    );
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred, Please try again",
+      error: error.message,
+      status: 500,
+    });
+  }
+};
+
+/**
+ * 📊 Get Project Resource Data
+ * Retrieves project resource data.
+ */
+projectResourcesController.GetData = async (req, res) => {
+  try {
+    const { project_id, organization_id } = req.body;
+
+    /** 🛑 Validate required fields */
+    if (!project_id || !organization_id) {
+      logger.warn("⚠️ Missing required fields for GetData");
+      return res.status(400).json({
+        success: false,
+        message: "Some fields are missing",
+        status: 400,
+      });
+    }
+
+    logger.info(`📡 Fetching project resource data for ID: ${project_id}`);
+
+    /** 🚀 Fetch project data */
+    const projectData = await projectResourcesModel.findOne({
+      organization_id,
+      project_id,
+    });
+
+    logger.info(
+      `✅ Project resource data fetched successfully for ID: ${project_id}`
+    );
+    return res.status(200).json({
+      success: true,
+      message: "Project resources fetched successfully",
+      status: 200,
+      data: projectData,
+    });
+  } catch (error) {
+    logger.error(
+      `❌ Error fetching project ID ${req.body.project_id}: ${error.message}`
+    );
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred, Please try again",
+      error: error.message,
+      status: 500,
+    });
+  }
+};
+
+module.exports = projectResourcesController;
