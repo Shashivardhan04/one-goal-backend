@@ -1,14 +1,24 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
-const contactResoSchema = new mongoose.Schema({
-  callLogs: { type: Array, default: [] },
-  organization_id: { type: String, default: '' },
-  uid: { type: String, default: '' },
-});
+const contactResoSchema = new mongoose.Schema(
+  {
+    organization_id: { type: String, required: true }, // Ensuring integrity of data
+    uid: { type: String, required: true }, // Making uid a required field
+    callLogs: [
+      {
+        type: Object,
+        default: {},
+      },
+    ],
+  },
+  {
+    timestamps: { createdAt: "created_at", updatedAt: "updated_at" }, // Standardized timestamp naming
+  }
+);
 
-const contactResoModel = new mongoose.model(
-  'newcontactResources',
+const ContactResourceModel = mongoose.model(
+  "contactResources",
   contactResoSchema
 );
 
-module.exports = contactResoModel;
+module.exports = ContactResourceModel;

@@ -1,289 +1,66 @@
-const express = require('express');
-const bookingController = require('../controllers/bookingController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
+const bookingController = require("../controllers/bookingController");
 
-const {
-    Create,
-    Update,
-    Delete,
-    Details,
-    BookingList,
-    BookingCount,
-} = bookingController;
+const router = express.Router();
+
+// Destructure controller methods for cleaner usage
+const { Create, Update, Delete, Details, BookingList, BookingCount } =
+  bookingController;
 
 /**
- * @openapi
- * /bookings/create:
- *   post:
- *     summary: Create a Booking
- *     description: Use this endpoint to create a new booking.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               propertyName:
- *                 type: string
- *             required:
- *               - propertyName
- *     responses:
- *       201:
- *         description: Booking created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the booking.
- *     tags:
- *       - booking
+ * 🛠 Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.post('/create', Create);
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
 /**
- * @openapi
- * /bookings/update:
- *   post:
- *     summary: Update a Booking
- *     description: Use this endpoint to update an existing booking.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               propertyName:
- *                 type: string
- *             required:
- *               - propertyName
- *     responses:
- *       200:
- *         description: Booking updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the booking update.
- *     tags:
- *       - booking
+ * ➕ Create Booking
+ * Inserts a new booking record into the system.
  */
-router.post('/update', Update);
+router.post("/create", asyncHandler(Create));
 
 /**
- * @openapi
- * /bookings/delete:
- *   delete:
- *     summary: Delete a Booking
- *     description: Use this endpoint to delete a booking based on the specified criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *       - in: query
- *         name: id
- *         required: true
- *         description: The ID of the booking to delete.
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Booking deleted successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the booking deletion.
- *     tags:
- *       - booking
+ * 🔄 Update Booking
+ * Updates an existing booking record.
  */
-router.delete('/delete', Delete);
+router.put("/update", asyncHandler(Update));
 
 /**
- * @openapi
- * /bookings/details:
- *   post:
- *     summary: Get Booking Details
- *     description: Retrieve details of a booking based on the specified criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               propertyName:
- *                 type: string
- *             required:
- *               - propertyName
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Booking details based on the specified criteria.
- *     tags:
- *       - booking
+ * ❌ Delete Booking
+ * Removes a booking record from the system.
  */
-router.post('/details', Details);
+router.delete("/delete", asyncHandler(Delete));
 
 /**
- * @openapi
- * /bookings/booking:
- *   post:
- *     summary: Get Booking List
- *     description: Retrieve a list of bookings based on specific criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               criteria:
- *                 type: string
- *             example:
- *               criteria: "your-search-criteria"
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       propertyName:
- *                         type: string
- *                     example:
- *                       propertyName: "Example Property"
- *       403:
- *         description: Forbidden - Token not found or invalid
- *     tags:
- *       - booking
+ * 🔍 Retrieve Booking Details
+ * Fetches detailed information for a specific booking.
  */
-router.post('/booking', BookingList);
+router.post("/details", asyncHandler(Details));
 
 /**
- * @openapi
- * /bookings/bookingcount:
- *   post:
- *     summary: Get Booking Count
- *     description: Retrieve the count of bookings based on specific criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               criteria:
- *                 type: string
- *             example:
- *               criteria: "your-search-criteria"
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: integer
- *                   example: 100
- *       403:
- *         description: Forbidden - Token not found or invalid
- *     tags:
- *       - booking
+ * 📋 Get Booking List
+ * Retrieves a paginated list of booking records.
  */
-router.post('/bookingcount', BookingCount);
+router.post("/booking", asyncHandler(BookingList));
+
+/**
+ * 📊 Get Booking Count
+ * Retrieves the total number of bookings.
+ */
+router.post("/bookingcount", asyncHandler(BookingCount));
 
 module.exports = router;

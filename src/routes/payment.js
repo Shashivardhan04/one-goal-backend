@@ -1,221 +1,59 @@
-const express = require('express');
-const paymentController = require('../controllers/paymentController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
+const paymentController = require("../controllers/paymentController");
 
-const {
-    Create,
-    Verification,
-    Search,
-    CreatePdf,
-    Get
-} = paymentController;
+const router = express.Router();
+
+// Destructure controller methods for cleaner usage
+const { Create, Verification, Search, CreatePdf, Get } = paymentController;
 
 /**
- * @openapi
- * /payments/createorder:
- *   post:
- *     summary: Create Order
- *     description: Create a new order with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               orderData:
- *                 type: object
- *                 description: Data for creating the order.
- *             example:
- *               orderData: { /* your order data here * / }
- *     responses:
- *       201:
- *         description: Order created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - payments
+ * 🛠 Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.post('/createorder', Create);
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
 /**
- * @openapi
- * /payments/paymentverification:
- *   post:
- *     summary: Payment Verification
- *     description: Verify a payment with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               paymentData:
- *                 type: object
- *                 description: Data for verifying the payment.
- *             example:
- *               paymentData: { /* your payment data here * / }
- *     responses:
- *       200:
- *         description: Payment verification successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - payments
+ * ➕ Create Payment Order
+ * Initiates a new payment order and returns order details.
  */
-router.post('/paymentverification', Verification);
+router.post("/createorder", asyncHandler(Create));
 
 /**
- * @openapi
- * /payments/search:
- *   post:
- *     summary: Search
- *     description: Perform a search operation based on specific criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               searchCriteria:
- *                 type: string
- *                 description: The criteria for the search.
- *             example:
- *               searchCriteria: "your-search-criteria"
- *     responses:
- *       200:
- *         description: Successful search
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - payments
+ * ✅ Payment Verification
+ * Verifies payment status and updates transaction records.
  */
-router.post('/search', Search);
+router.post("/paymentverification", asyncHandler(Verification));
 
 /**
- * @openapi
- * /payments/createpdf:
- *   post:
- *     summary: Create PDF
- *     description: Create a PDF document based on the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               pdfData:
- *                 type: object
- *                 description: Data for creating the PDF document.
- *             example:
- *               pdfData: { /* your PDF data here * / }
- *     responses:
- *       201:
- *         description: PDF document created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - payments
+ * 🔎 Search Payment Records
+ * Retrieves payment details based on search parameters.
  */
-router.post('/createpdf', CreatePdf);
+router.post("/search", asyncHandler(Search));
 
 /**
- * @openapi
- * /payments/get:
- *   get:
- *     summary: Get Data
- *     description: Retrieve data based on specific criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - payments
+ * 📄 Generate Payment Receipt PDF
+ * Creates a PDF receipt for a completed transaction.
  */
-router.get('/get', Get);
+router.post("/createpdf", asyncHandler(CreatePdf));
+
+/**
+ * 📊 Get Payment Data
+ * Fetches general payment tracking and statistics.
+ */
+router.get("/get", asyncHandler(Get));
 
 module.exports = router;

@@ -1,131 +1,47 @@
-const express = require('express');
-const licenceTrackingController = require('../controllers/licenceTrackingController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
+const licenceTrackingController = require("../controllers/licenceTrackingController");
 
-const {
-    Get,
-    Getorg,
-    Update,
-} = licenceTrackingController;
+const router = express.Router();
 
-/**
- * @openapi
- * /licence/get:
- *   get:
- *     summary: Get Project Resource
- *     description: Retrieve project resource information based on the provided criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - licence
- */
-router.get("/get", Get);
+// Destructure controller methods for cleaner usage
+const { Get, Getorg, Update } = licenceTrackingController;
 
 /**
- * @openapi
- * /licence/getorg:
- *   post:
- *     summary: Get Organization
- *     description: Retrieve organization information based on specific criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               organizationData:
- *                 type: object
- *                 description: The data to update the organization.
- *             example:
- *               organizationData: { /* your organization data here * / }
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - licence
+ * 🛠 Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.post('/getorg', Getorg);
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
 /**
- * @openapi
- * /licence/update:
- *   post:
- *     summary: Update Organization
- *     description: Update organization information with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               organizationData:
- *                 type: object
- *                 description: The data to update the organization.
- *             example:
- *               organizationData: { /* your organization data here * / }
- *     responses:
- *       200:
- *         description: Organization updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - licence
+ * 🔍 Get Licence Tracking Data
+ * Fetches licence tracking information.
  */
-router.post('/update', Update);
+router.get("/get", asyncHandler(Get));
+
+/**
+ * 🔍 Get Organisation Licence Tracking Data
+ * Retrieves licence tracking details for a specific organization.
+ */
+router.post("/getorg", asyncHandler(Getorg));
+
+/**
+ * 🔄 Update Licence Tracking Data
+ * Updates the licence tracking information.
+ */
+router.post("/update", asyncHandler(Update));
 
 module.exports = router;

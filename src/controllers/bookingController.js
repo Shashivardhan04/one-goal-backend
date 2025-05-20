@@ -1,831 +1,687 @@
 var ObjectId = require("mongoose").Types.ObjectId;
 const bookingModel = require("../models/bookingSchema");
 const userModel = require("../models/userSchema");
+const logger = require("../services/logger");
 const bookingController = {};
-const CryptoJS = require('crypto-js');
+const CryptoJS = require("crypto-js");
 require("dotenv").config();
 
 // Function to decrypt PAN
 const decryptPAN = (encryptedPAN) => {
   const secretKey = process.env.REACT_APP_SECRET_KEY; // Must match the key used in React
-//   console.log("efnuernferfjenrfjnerj",secretKey
-//   )
+  //   console.log("efnuernferfjenrfjnerj",secretKey
+  //   )
   const bytes = CryptoJS.AES.decrypt(encryptedPAN, secretKey);
   const decryptedPAN = bytes.toString(CryptoJS.enc.Utf8);
   return decryptedPAN;
 };
 
-const validatePAN=(pan) =>{
-    const panPattern = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}$/;
-    if (typeof pan !== 'string') {
-      return false;
-    }
-    return panPattern.test(pan.toUpperCase());
+const validatePAN = (pan) => {
+  const panPattern = /^[A-Za-z]{5}[0-9]{4}[A-Za-z]{1}$/;
+  if (typeof pan !== "string") {
+    return false;
   }
+  return panPattern.test(pan.toUpperCase());
+};
 
 const datesField = [
-    "created_at",
-    "next_follow_up_date_time",
-    "stage_change_at",
-    "modified_at",
-    "lead_assign_time",
+  "created_at",
+  "next_follow_up_date_time",
+  "stage_change_at",
+  "modified_at",
+  "lead_assign_time",
 ];
-const booleanField = [
-    "associate_status",
-    "source_status",
-    "transfer_status",
-];
+const booleanField = ["associate_status", "source_status", "transfer_status"];
 //post data in booking
-// created_at: { type: Date, default: new Date() },
+/**
+ * ➕ Create Booking
+ * Inserts a new booking record with validation and logging.
+ */
 bookingController.Create = async (req, res) => {
-    
   try {
-   
-    const validate=validatePAN(req.body.booking_details?.pan_card);
-   let panValue="";
+    const {
+      organization_id,
+      uid,
+      booking_details,
+      reporting_to,
+      branch,
+      team,
+      location,
+      project,
+      contact_no,
+      contact_details,
+      notes,
+      attachments,
+      call_logs,
+    } = req.body;
 
-    if(!validate){
-     panValue=decryptPAN(req.body.booking_details?.pan_card);
-    }
-
-    const uid = req.body.uid;
-    const resultUser = await userModel.find({ uid });
-    if (resultUser.length === 0) {
-        res.send({ error: "User Not Found" });
-    }
-    const user = resultUser[0];
-    const profile = user?.profile;
-    const user_email = user?.user_email;
-
-    const data = new bookingModel({
-        organization_id: req.body.organization_id,
-        uid: req.body.uid,
-        reporting_to: req.body.reporting_to,
-        branch: req.body.branch,
-        team: req.body.team,
-        location: req.body.location,
-        project: req.body.project,
-        contact_no: req.body.contact_no,
-        contactDetails: req.body.contact_details,
-        notes: req.body.notes,
-        attachments: req.body.attachments,
-        callLogs: req.body.call_logs,
-        bookingDetails: [{
-            booking_id: req.body.booking_details?.booking_id,
-            date_booking: new Date(req.body.booking_details?.date_booking),
-            developer_name: req.body.booking_details?.developer_name,
-            declaration: req.body.booking_details?.declaration,
-            project_name: req.body.booking_details?.project_name,
-            area: req.body.booking_details?.area,
-            area_type: req.body.booking_details?.area_type,
-            unit_no: req.body.booking_details?.unit_no,
-            source_fund: req.body.booking_details?.source_fund,
-            scheme: req.body.booking_details?.scheme,
-            pan_card: panValue,
-            booking_attachmentS3: req.body.booking_details?.booking_attachmentS3,
-            Kyc_attachmentS3: req.body.booking_details?.Kyc_attachmentS3,
-            video_kyc: req.body.booking_details?.video_kyc,
-            status: req.body.booking_details?.status,
-            created_at: new Date(),
-            profile,
-            user_email
-        }
-        ],
-        created_at: new Date()
-    });
-    data.save(async function (err, result) {
-        if (err) {
-            console.log(err);
-        } else {
-            console.log("DONE BOOKING INSERTION");
-        }
-    });
-    res.send("inserted data");
-  } catch (error) {
+    /** 🛑 Validate required fields */
+    if (!organization_id || !uid || !booking_details?.booking_id) {
+      logger.warn("⚠️ Missing required booking fields");
       return res.status(400).json({
+        success: false,
+        message: "Required fields are missing",
+        status: 400,
+      });
+    }
+
+    logger.info(`📡 Creating booking for UID: ${uid}`);
+
+    /** 🔄 Validate PAN */
+    const isPANValid = validatePAN(booking_details?.pan_card);
+    const panValue = isPANValid
+      ? booking_details?.pan_card
+      : decryptPAN(booking_details?.pan_card);
+
+    /** 🔍 Fetch user details */
+    const user = await userModel.findOne({ uid });
+    if (!user) {
+      logger.warn(`⚠️ User not found for UID: ${uid}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found", status: 404 });
+    }
+
+    const { profile, user_email } = user;
+
+    /** 🚀 Create new booking record */
+    const bookingData = new bookingModel({
+      organization_id,
+      uid,
+      reporting_to,
+      branch,
+      team,
+      location,
+      project,
+      contact_no,
+      contactDetails: contact_details,
+      notes,
+      attachments,
+      callLogs: call_logs,
+      bookingDetails: [
+        {
+          booking_id: booking_details?.booking_id,
+          date_booking: new Date(booking_details?.date_booking),
+          developer_name: booking_details?.developer_name,
+          declaration: booking_details?.declaration,
+          project_name: booking_details?.project_name,
+          area: booking_details?.area,
+          area_type: booking_details?.area_type,
+          unit_no: booking_details?.unit_no,
+          source_fund: booking_details?.source_fund,
+          scheme: booking_details?.scheme,
+          pan_card: panValue,
+          booking_attachmentS3: booking_details?.booking_attachmentS3,
+          Kyc_attachmentS3: booking_details?.Kyc_attachmentS3,
+          video_kyc: booking_details?.video_kyc,
+          status: booking_details?.status,
+          created_at: new Date(),
+          profile,
+          user_email,
+        },
+      ],
+      created_at: new Date(),
+    });
+
+    /** 🚀 Save booking data */
+    await bookingData.save();
+
+    logger.info(`✅ Booking successfully created for UID: ${uid}`);
+    return res.status(201).json({
+      success: true,
+      message: "Booking successfully created",
+      status: 201,
+      data: bookingData,
+    });
+  } catch (error) {
+    logger.error(
+      `❌ Error creating booking for UID ${req.body.uid}: ${error.message}`
+    );
+    return res.status(500).json({
       success: false,
       message: "An error occurred",
       error: error.message,
+      status: 500,
     });
   }
 };
-//update data in booking
+
+/**
+ * 🔄 Update Booking
+ * Updates an existing booking record with structured validation and logging.
+ */
 bookingController.Update = async (req, res) => {
-    // let bookingDetailsArr=[];
-    const organization_id = req.body.organization_id;
-    const uid = req.body.uid;
-    const contact_no = req.body.contact_no;
+  try {
+    const { organization_id, uid, contact_no, booking_details } = req.body;
 
-    const reqBookingObj = req.body.booking_details;
-    const resultUser = await userModel.find({ uid });
-    if (resultUser.length === 0) {
-        res.send({ error: "User Not Found" });
+    /** 🛑 Validate required fields */
+    if (
+      !organization_id ||
+      !uid ||
+      !contact_no ||
+      !booking_details?.booking_id
+    ) {
+      logger.warn("⚠️ Missing required booking fields");
+      return res.status(400).json({
+        success: false,
+        message: "Required fields are missing",
+        status: 400,
+      });
     }
 
-    const user = resultUser[0];
-    const profile = user.profile;
-    if (profile.toLowerCase() == "lead manager" || profile.toLowerCase() == "admin" ) {
-        const { date_booking, ...reqObj } = reqBookingObj;
-        const bookingObj = {
-            ...reqObj,
-            date_booking: new Date(date_booking)
-        };
-        const getData = await bookingModel.find({
-            organization_id,
-            uid,
-            contact_no
-        });
-        const { bookingDetails, ...objData } = getData[0]?._doc;
-        const bookingDetailsArr = [...bookingDetails, bookingObj];
-        try {
-            await bookingModel.findOneAndUpdate({ uid, organization_id, contact_no }, { "bookingDetails": bookingDetailsArr })
-            res.send('updated data');
-        }
-        catch (error) {
-            console.log(error);
-            res.send({ error });
-        }
+    logger.info(`📡 Updating booking for UID: ${uid}`);
 
-    } else if (profile.toLowerCase() == "team lead") {
-        const { date_booking, ...reqObj } = reqBookingObj;
-        const bookingObj = {
-            ...reqObj,
-            date_booking: new Date(date_booking)
-        };
-        const getData = await bookingModel.find({
-            organization_id,
-            uid,
-            contact_no
-        });
-        const { bookingDetails, ...objData } = getData[0]?._doc;
-        const bookingDetailsArr = [...bookingDetails, bookingObj];
-        try {
-            await bookingModel.findOneAndUpdate({ uid, organization_id, contact_no }, { "bookingDetails": bookingDetailsArr })
-            res.send('updated data');
-        }
-        catch (error) {
-            console.log(error);
-            res.send({ error });
-        }
-
-    } else if (profile.toLowerCase() == "operation manager") {
-        try {
-            let find;
-            let booking_id = req.body.booking_details.booking_id;
-            let applicant_details = req.body.booking_details.applicant_details;
-            let property_details_BSP = req.body.booking_details.property_details_BSP;
-            let additional_charges = req.body.booking_details.additional_charges;
-            let consolidated_costing = req.body.booking_details.consolidated_costing;
-            let payment_plan = req.body.booking_details.payment_plan;
-            let source_of_fund = req.body.booking_details.source_of_fund;
-            let attachments = req.body.booking_details.attachments;
-            let employee_details = req.body.booking_details.employee_details;
-            find = {
-                organization_id,
-                contact_no,
-            }
-            const booking = await bookingModel.find(find);
-            const filterBookingData = booking[0]?._doc?.bookingDetails?.filter(list => list.booking_id === booking_id)
-            const OmUpdateData = {
-                ...filterBookingData[0],
-                status: req.body.booking_details.status,
-                added_by: req.body.booking_details.added_by,
-                modified_by: req.body.booking_details.modified_by,
-                modified_time: req.body.booking_details.modified_time,
-                date_booking: req.body.booking_details.date_booking,
-                developer_name: req.body.booking_details.developer_name,
-                declaration: req.body.booking_details?.declaration,
-                project_name: req.body.booking_details.project_name,
-                area: req.body.booking_details.area,
-                unit_no: req.body.booking_details.unit_no,
-                source_fund: req.body.booking_details.source_fund,
-                scheme: req.body.booking_details.scheme,
-                area_type: req.body.booking_details.area_type,
-                booking_attachmentS3: req.body.booking_details.booking_attachmentS3,
-                Kyc_attachmentS3: req.body.booking_details.Kyc_attachmentS3,
-                pan_card: req.body.booking_details.pan_card,
-                applicant_details,
-                property_details_BSP,
-                additional_charges,
-                consolidated_costing,
-                payment_plan,
-                source_of_fund,
-                attachments,
-                employee_details,
-            }
-            let AllDataArr = booking[0]?._doc?.bookingDetails;
-            const removeobjData = AllDataArr?.findIndex((obj) => obj.booking_id === booking_id);
-            AllDataArr.splice(removeobjData, 1);
-
-            let updatedArray = [OmUpdateData, ...AllDataArr];
-
-            const updation = await bookingModel.findOneAndUpdate({ organization_id, contact_no }, { "bookingDetails": updatedArray })
-
-            res.send("value updated");
-
-
-        }
-        catch (error) {
-            res.send({ error });
-        }
-
-
-    } else {
-        const { date_booking, ...reqObj } = reqBookingObj;
-        const bookingObj = {
-            ...reqObj,
-            date_booking: new Date(date_booking)
-        };
-        const getData = await bookingModel.find({
-            organization_id,
-            uid,
-            contact_no
-        });
-        const { bookingDetails, ...objData } = getData[0]?._doc;
-        const bookingDetailsArr = [...bookingDetails, bookingObj];
-        try {
-            await bookingModel.findOneAndUpdate({ uid, organization_id, contact_no }, { "bookingDetails": bookingDetailsArr })
-            res.send('updated data');
-        }
-        catch (error) {
-            console.log(error);
-            res.send({ error });
-        }
-
+    /** 🔍 Fetch user details */
+    const user = await userModel.findOne({ uid });
+    if (!user) {
+      logger.warn(`⚠️ User not found for UID: ${uid}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found", status: 404 });
     }
 
-};
-const getBranchUsers = async (
-    uid,
-    organization_id,
-    permission
-) => {
-    const users = await userModel.find({
-        organization_id,
-        branch: { $in: permission },
-    });
-    let usersList = [uid];
-    users.forEach((user) => usersList.push(user.uid));
-    return usersList;
-};
+    const { profile } = user;
 
-const getTeamUsers = async (uid, organization_id) => {
-    const users = await userModel.find({ organization_id });
-    const user = users.filter((user) => user.uid === uid);
-    let reportingToMap = {};
-    let usersList = [user[0].uid];
-
-    users.forEach((item) => {
-        if (item.reporting_to === "") {
-            return;
-        }
-        if (reportingToMap[item.reporting_to]) {
-            reportingToMap[item.reporting_to].push({
-                user_email: item.user_email,
-                uid: item.uid,
-            });
-        } else {
-            reportingToMap[item.reporting_to] = [
-                { user_email: item.user_email, uid: item.uid },
-            ];
-        }
-    });
-
-    const createUsersList = (email, data) => {
-        if (data[email] === undefined) {
-            return;
-        } else {
-            data[email].forEach((user) => {
-                if (usersList.includes(user.uid)) {
-                    return;
-                }
-                usersList.push(user.uid);
-                createUsersList(user.user_email, data);
-            });
-        }
+    /** 🚀 Prepare booking update object */
+    const { date_booking, booking_id, ...updateFields } = booking_details;
+    const formattedBooking = {
+      ...updateFields,
+      date_booking: new Date(date_booking),
+      booking_id,
     };
 
-    createUsersList(user[0].user_email, reportingToMap);
+    /** 🔍 Fetch existing booking data */
+    const existingBooking = await bookingModel.findOne({
+      organization_id,
+      uid,
+      contact_no,
+    });
+    if (!existingBooking) {
+      logger.warn(`⚠️ Booking not found for UID: ${uid}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "Booking not found", status: 404 });
+    }
+
+    let updatedBookingDetails;
+
+    /** 🔄 Handle profile-specific update logic */
+    if (
+      ["lead manager", "admin", "team lead"].includes(profile.toLowerCase())
+    ) {
+      updatedBookingDetails = [
+        ...existingBooking.bookingDetails,
+        formattedBooking,
+      ];
+    } else if (profile.toLowerCase() === "operation manager") {
+      updatedBookingDetails = existingBooking.bookingDetails.map((booking) =>
+        booking.booking_id === booking_id
+          ? { ...booking, ...formattedBooking }
+          : booking
+      );
+    } else {
+      updatedBookingDetails = [
+        ...existingBooking.bookingDetails,
+        formattedBooking,
+      ];
+    }
+
+    /** 🚀 Execute update */
+    await bookingModel.findOneAndUpdate(
+      { organization_id, uid, contact_no },
+      { bookingDetails: updatedBookingDetails },
+      { new: true }
+    );
+
+    logger.info(`✅ Booking updated successfully for UID: ${uid}`);
+    return res.status(200).json({
+      success: true,
+      message: "Booking updated successfully",
+      status: 200,
+    });
+  } catch (error) {
+    logger.error(
+      `❌ Error updating booking for UID ${req.body.uid}: ${error.message}`
+    );
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred",
+      error: error.message,
+      status: 500,
+    });
+  }
+};
+
+/**
+ * 🔍 Get Branch Users
+ * Retrieves all users in the specified branches along with the requesting UID.
+ */
+const getBranchUsers = async (uid, organization_id, permission) => {
+  try {
+    /** 🛑 Validate required parameters */
+    if (
+      !uid ||
+      !organization_id ||
+      !Array.isArray(permission) ||
+      permission.length === 0
+    ) {
+      logger.warn("⚠️ Invalid parameters passed to getBranchUsers");
+      return [uid];
+    }
+
+    logger.info(
+      `📡 Fetching branch users for Organization ID: ${organization_id}`
+    );
+
+    /** 🚀 Query users belonging to the specified branches */
+    const users = await userModel
+      .find({ organization_id, branch: { $in: permission } })
+      .select("uid -_id");
+
+    /** 🔄 Extract user UIDs */
+    const usersList = [uid, ...users.map((user) => user.uid)];
+
+    logger.info(
+      `✅ Retrieved ${usersList.length} branch users for Organization ID: ${organization_id}`
+    );
 
     return usersList;
+  } catch (error) {
+    logger.error(`❌ Error fetching branch users: ${error.message}`);
+    return [uid]; // Fallback to returning only the requester UID
+  }
 };
-//get data in booking
+
+/**
+ * 🔍 Get Team Users
+ * Retrieves all users reporting to the specified UID within the organization.
+ */
+const getTeamUsers = async (uid, organization_id) => {
+  try {
+    /** 🛑 Validate required parameters */
+    if (!uid || !organization_id) {
+      logger.warn("⚠️ Invalid parameters passed to getTeamUsers");
+      return [uid];
+    }
+
+    logger.info(
+      `📡 Fetching team users for Organization ID: ${organization_id}`
+    );
+
+    /** 🚀 Query users within the organization */
+    const users = await userModel
+      .find({ organization_id })
+      .select("uid reporting_to user_email -_id");
+
+    /** 🔍 Find the requesting user */
+    const requestingUser = users.find((user) => user.uid === uid);
+    if (!requestingUser) {
+      logger.warn(`⚠️ User not found for UID: ${uid}`);
+      return [uid];
+    }
+
+    /** 🔄 Create mapping of reporting relationships */
+    const reportingToMap = users.reduce((map, user) => {
+      if (user.reporting_to) {
+        map[user.reporting_to] = map[user.reporting_to] || [];
+        map[user.reporting_to].push({
+          user_email: user.user_email,
+          uid: user.uid,
+        });
+      }
+      return map;
+    }, {});
+
+    /** 🚀 Recursive function to gather team users */
+    const usersList = [requestingUser.uid];
+    const createUsersList = (email, data) => {
+      if (!data[email]) return;
+
+      data[email].forEach((user) => {
+        if (!usersList.includes(user.uid)) {
+          usersList.push(user.uid);
+          createUsersList(user.user_email, data);
+        }
+      });
+    };
+
+    createUsersList(requestingUser.user_email, reportingToMap);
+
+    logger.info(
+      `✅ Retrieved ${usersList.length} team users for Organization ID: ${organization_id}`
+    );
+
+    return usersList;
+  } catch (error) {
+    logger.error(`❌ Error fetching team users: ${error.message}`);
+    return [uid]; // Fallback to returning only the requester UID
+  }
+};
+
+/**
+ * 📋 Get Booking List
+ * Retrieves a filtered, paginated list of bookings.
+ */
 bookingController.BookingList = async (req, res) => {
-    const uid = req.body.uid;
-    let filter = req.body.filter;
-    let arrFilter = req.body?.bookingFilter;
-    let skip = req.body.skip;
-    let limit = req.body.limit;
-    // let callLogsFilter = req.body.callLogsFilter;
-    // let attachmentFilter = req.body.attachmentFilter;
-    const sort = req.body.sort;
-    const missed = req.body.missed;
-    const searchString = req.body.searchString
-        ? req.body.searchString
-        : "";
-    const page = Number(req.body.page);
-    const pageSize = Number(req.body.pageSize);
+  try {
+    const {
+      uid,
+      filter = {},
+      bookingFilter: arrFilter = {},
+      missed,
+      searchString = "",
+      sort,
+      page = 1,
+      pageSize = 10,
+    } = req.body;
+
+    /** 🔍 Fetch user details */
+    const user = await userModel.findOne({ uid });
+    if (!user) {
+      logger.warn(`⚠️ User not found for UID: ${uid}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found", status: 404 });
+    }
+
+    const { profile, organization_id, branchPermission } = user;
+
+    /** 🛑 Validate required fields */
+    if (!organization_id) {
+      logger.warn("⚠️ Missing required fields for fetching booking list");
+      return res.status(400).json({
+        success: false,
+        message: "Organization ID is required",
+        status: 400,
+      });
+    }
+
+    logger.info(`📡 Fetching booking list for UID: ${uid}`);
+
+    /** 🔄 Process filters */
     let report = [];
     let cond = false;
 
     Object.keys(filter).forEach((key) => {
-        if (datesField.includes(key)) {
-            if (filter[key].length && filter[key].length === 2) {
-                filter[key] = {
-                    $gte: new Date(filter[key][0]),
-                    $lte: new Date(filter[key][1]),
-                };
-            }
-        } else if (booleanField.includes(key)) {
-            filter[key].forEach((element, index) => {
-                if (element === "True" || element === true) {
-                    filter[key][index] = true;
-                } else if (
-                    element === "False" ||
-                    element === false
-                ) {
-                    filter[key][index] = false;
-                }
-            });
-        }
-        else if (key === "reporting_to") {
-            report = filter[key];
-            cond = true;
-            delete filter[key];
-        }
-        else {
-            filter[key] = { $in: filter[key] };
-        }
+      if (Array.isArray(filter[key]) && filter[key].length === 2) {
+        filter[key] = {
+          $gte: new Date(filter[key][0]),
+          $lte: new Date(filter[key][1]),
+        };
+      } else if (key === "reporting_to") {
+        report = filter[key];
+        cond = true;
+        delete filter[key];
+      } else {
+        filter[key] = { $in: filter[key] };
+      }
     });
+
     Object.keys(arrFilter).forEach((key) => {
-        arrFilter[key] = { $in: arrFilter[key] };
+      arrFilter[key] = { $in: arrFilter[key] };
     });
-    // Object.keys(callLogsFilter).forEach((key) => {
-    //     callLogsFilter[key] = { $in: callLogsFilter[key] };
-    // });
-    // Object.keys(attachmentFilter).forEach((key) => {
-    //     attachmentFilter[key] = { $in: attachmentFilter[key] };
-    // });
 
+    /** 🔎 Handle missed follow-ups */
+    if (missed) {
+      filter["next_follow_up_date_time"] = { $lt: new Date() };
+    }
+
+    /** 🔍 Search functionality */
+    const contact_list = [];
+    const customer_name_list = [];
+
+    searchString.split(",").forEach((search) => {
+      const trimmed = search.trim();
+      const re = new RegExp(trimmed, "i");
+      /^\d+$/.test(trimmed)
+        ? contact_list.push(re)
+        : customer_name_list.push(re);
+    });
+
+    if (contact_list.length) filter["contact_no"] = { $in: contact_list };
+    if (customer_name_list.length)
+      filter["customer_name"] = { $in: customer_name_list };
+
+    /** 🔍 Fetch reporting users */
     let reportingUsers = await userModel
-        .find({
-            reporting_to: { $in: report },
-        })
-        .select("uid -_id");
-
+      .find({ reporting_to: { $in: report } })
+      .select("uid -_id");
     reportingUsers = reportingUsers.map(({ uid }) => uid);
 
-    if (missed === true) {
-        filter["next_follow_up_date_time"] = {
-            $lt: new Date(),
-        };
+    /** 🚀 Fetch booking data */
+    let find = cond
+      ? { organization_id, ...filter, uid: { $in: reportingUsers } }
+      : { organization_id, ...filter };
+    let bookings = await bookingModel
+      .find(find)
+      .sort(sort)
+      .skip((page - 1) * pageSize)
+      .limit(pageSize);
+
+    logger.info(`✅ Booking list retrieved successfully for UID: ${uid}`);
+    return res.status(200).json({
+      success: true,
+      message: "Booking list retrieved successfully",
+      status: 200,
+      data: bookings,
+    });
+  } catch (error) {
+    logger.error(`❌ Error fetching booking list: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred",
+      error: error.message,
+      status: 500,
+    });
+  }
+};
+
+/**
+ * 🔍 Get Booking Details
+ * Retrieves details of a specific booking by `booking_id`, or confirms if a booking exists.
+ */
+bookingController.Details = async (req, res) => {
+  try {
+    const { uid, organization_id, contact_no, booking_id } = req.body;
+
+    /** 🛑 Validate required fields */
+    if (!organization_id || !contact_no) {
+      logger.warn("⚠️ Missing required fields for fetching booking details");
+      return res.status(400).json({
+        success: false,
+        message: "Required fields are missing",
+        status: 400,
+      });
     }
 
-    let customer_name_list = [];
-    let contact_list = [];
+    logger.info(`📡 Fetching booking details for Contact No: ${contact_no}`);
 
-    searchString.split(",").forEach((string) => {
-        search = string.trim();
-        const re = new RegExp(search, "i");
-        if (search.match(/^[0-9]+$/) != null) {
-            contact_list.push(re);
-        } else if (search !== "") {
-            customer_name_list.push(re);
-        }
+    /** 🔍 Retrieve booking details */
+    const booking = await bookingModel
+      .findOne({ organization_id, contact_no })
+      .lean();
+
+    if (!booking) {
+      logger.warn(`⚠️ No booking found for Contact No: ${contact_no}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "Booking not found", status: 404 });
+    }
+
+    /** 🔄 Handle response based on `booking_id` existence */
+    if (booking_id) {
+      const filteredBookingData = booking.bookingDetails?.filter(
+        (item) => item.booking_id === booking_id
+      );
+      logger.info(
+        `✅ Booking details fetched successfully for Booking ID: ${booking_id}`
+      );
+      return res.status(200).json({
+        success: true,
+        message: "Booking details retrieved",
+        status: 200,
+        data: filteredBookingData,
+      });
+    }
+
+    /** ✅ Confirm booking exists */
+    return res
+      .status(200)
+      .json({ success: true, message: "Booking exists", status: 200 });
+  } catch (error) {
+    logger.error(`❌ Error fetching booking details: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred",
+      error: error.message,
+      status: 500,
+    });
+  }
+};
+
+/**
+ * ❌ Delete Booking
+ * Removes a booking record by its `_id`.
+ */
+bookingController.Delete = async (req, res) => {
+  try {
+    const { id } = req.query;
+
+    /** 🛑 Validate required fields */
+    if (!id) {
+      logger.warn("⚠️ Missing required booking ID for deletion");
+      return res.status(400).json({
+        success: false,
+        message: "Booking ID is required",
+        status: 400,
+      });
+    }
+
+    logger.info(`📡 Deleting booking with ID: ${id}`);
+
+    /** 🚀 Execute deletion */
+    const deletedBooking = await bookingModel.findOneAndDelete({ _id: id });
+
+    /** 🛑 Handle case where booking is not found */
+    if (!deletedBooking) {
+      logger.warn(`⚠️ Booking not found for ID: ${id}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "Booking not found", status: 404 });
+    }
+
+    logger.info(`✅ Booking deleted successfully for ID: ${id}`);
+    return res.status(200).json({
+      success: true,
+      message: "Booking deleted successfully",
+      status: 200,
+    });
+  } catch (error) {
+    logger.error(
+      `❌ Error deleting booking ID ${req.query.id}: ${error.message}`
+    );
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred",
+      error: error.message,
+      status: 500,
+    });
+  }
+};
+
+/**
+ * 📊 Get Booking Count
+ * Retrieves the total number of bookings with filtering options.
+ */
+bookingController.BookingCount = async (req, res) => {
+  try {
+    const { uid, filter = {} } = req.body;
+
+    /** 🔍 Fetch user details */
+    const user = await userModel.findOne({ uid });
+    if (!user) {
+      logger.warn(`⚠️ User not found for UID: ${uid}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found", status: 404 });
+    }
+
+    const { profile, organization_id, branchPermission } = user;
+
+    /** 🛑 Validate required fields */
+    if (!organization_id) {
+      logger.warn("⚠️ Missing required fields for fetching booking count");
+      return res.status(400).json({
+        success: false,
+        message: "Organization ID is required",
+        status: 400,
+      });
+    }
+
+    logger.info(`📡 Fetching booking count for UID: ${uid}`);
+
+    /** 🔄 Prepare filtering conditions */
+    let conditions = [{ organization_id }];
+    let filterArr = [];
+
+    Object.keys(filter).forEach((key) => {
+      filterArr.push({ [key]: { $in: filter[key] } });
     });
 
-    if (contact_list.length !== 0) {
-        filter["contact_no"] = { $in: contact_list };
-    }
-    if (customer_name_list.length !== 0) {
-        filter["customer_name"] = { $in: customer_name_list };
-    }
-    const resultUser = await userModel.find({ uid });
-    if (resultUser.length === 0) {
-       return res.send({ error: "User Not Found" });
-    }
-
-    const user = resultUser[0];
-    const profile = user?.profile;
-    const organization_id = user?.organization_id;
-    console.log("profile", profile)
-    let bookings;
-    const group = {
+    /** 🚀 Prepare aggregation pipeline */
+    const aggregationPipeline = [
+      { $match: { $and: conditions } },
+      { $unwind: "$bookingDetails" },
+      { $match: filterArr.length ? { $and: filterArr } : {} },
+      {
         $group: {
-            // _id: '$_id',
-            _id: {
-                _id: '$_id',
-                organization_id: '$organization_id',
-                contact_no: '$contact_no',
-                reporting_to: '$reporting_to',
-                branch: '$branch',
-                team: '$team',
-                location: '$location',
-                project: '$project',
-                uid: '$uid',
-                created_at: '$created_at',
-                notes: '$notes',
-                attachments: '$attachments',
-                callLogs: '$callLogs',
-                contactDetails: '$contactDetails',
-            },
-            bookingDetails: { $push: '$bookingDetails' }
+          _id: { status: "$bookingDetails.status" },
+          count: { $sum: 1 },
         },
-    };
-    const project = {
-        $project: {
-            _id: 0,
-            _id: '$_id._id',
-            bookingDetails: 1,
-            organization_id: '$_id.organization_id',
-            contact_no: '$_id.contact_no',
-            reporting_to: '$_id.reporting_to',
-            branch: '$_id.branch',
-            team: '$_id.team',
-            location: '$_id.location',
-            project: '$_id.project',
-            uid: '$_id.uid',
-            created_at: '$_id.created_at',
-            notes: '$_id.notes',
-            attachments: '$_id.attachments',
-            callLogs: '$_id.callLogs',
-            contactDetails: '$_id.contactDetails',
-        },
-    };
-    if (profile.toLowerCase() == "lead manager" || profile.toLowerCase() == "admin") {
-        const permission = user.branchPermission;
-        if (
-            permission === undefined ||
-            (permission && permission.length === 0) ||
-            (permission && permission.includes("All"))
-        ) {
-            try {
-                let find;
-                if (!cond) find = { organization_id, ...filter };
-                else
-                    find = {
-                        organization_id,
-                        ...filter,
-                        uid: { $in: reportingUsers },
-                    };
-                // bookings = await bookingModel
-                //     .find(find, { _id: 0, __v: 0 })
-                //     .sort(sort)
-                //     .skip((page - 1) * pageSize)
-                //     .limit(pageSize);
-                // console.log("Query Printed", JSON.stringify(query));
-                bookings = await bookingModel
-                .find(find, { _id: 0, __v: 0 })
+      },
+    ];
 
-                return res.send(bookings);
-            } catch (error) {
-                return res.send({ error });
-            }
-        }
-        else {
-            let usersList = await getBranchUsers(
-                uid,
-                organization_id,
-                permission
-            );
-            try {
-                let find;
-                const interesectionArray = usersList.filter(
-                    (value) => reportingUsers.includes(value)
-                );
-                if (!cond)
-                    find = { uid: { $in: usersList }, ...filter };
-                else
-                    find = {
-                        uid: { $in: interesectionArray },
-                        ...filter,
-                    };
-                bookings = await bookingModel
-                    .find(find, { _id: 0, __v: 0 })
+    /** 🔄 Handle role-based filtering */
+    if (["lead manager", "admin"].includes(profile.toLowerCase())) {
+      const hasPermission =
+        !branchPermission ||
+        branchPermission.length === 0 ||
+        branchPermission.includes("All");
 
-                return res.send(bookings);
-            } catch (error) {
-               return res.send({ error });
-            }
-        }
-    }
-    else if (profile.toLowerCase() == "operation manager") {
-
-        try {
-            let find;
-            if (!cond) find = { organization_id, ...filter };
-            else
-                find = {
-                    organization_id,
-                    ...filter,
-                    uid: { $in: reportingUsers },
-                };
-            // bookings = await bookingModel
-            //     .find(find, { _id: 0, __v: 0 })
-            //     .sort(sort)
-            //     .skip((page - 1) * pageSize)
-            //     .limit(pageSize);
-            bookings = await bookingModel
-            .find(find, { _id: 0, __v: 0 })
-
-            return res.send(bookings);
-        } catch (error) {
-            return res.send({ error });
-        }
-
-
-    }
-    else if (profile.toLowerCase() == "team lead") {
-        let usersList = await getTeamUsers(
-            uid,
-            organization_id
+      if (!hasPermission) {
+        const usersList = await getBranchUsers(
+          uid,
+          organization_id,
+          branchPermission
         );
-        try {
-            let find;
-            const interesectionArray = usersList.filter((value) =>
-                reportingUsers.includes(value)
-            );
-            if (!cond) {
-
-                find = { uid: { $in: usersList }, ...arrFilter };
-
-            }
-            else {
-                if (arrFilter?.stage) {
-                    find = {
-                        uid: { $in: interesectionArray },
-                        ...arrFilter,
-                    };
-                }
-            }
-            // bookings = await bookingModel
-            //     .find(find, { _id: 0, __v: 0 })
-            //     .sort(sort)
-            //     .skip((page - 1) * pageSize)
-            //     .limit(pageSize);
-            bookings = await bookingModel
-            .find(find, { _id: 0, __v: 0 })
-
-            return res.send(bookings);
-        } catch (error) {
-            return res.send({ error });
-        }
+        conditions.push({ uid: { $in: usersList } });
+      }
+    } else if (profile.toLowerCase() === "team lead") {
+      const usersList = await getTeamUsers(uid, organization_id);
+      conditions.push({ uid: { $in: usersList } });
     } else {
-        try {
-            let find;
-            if (cond) {
-                find = reportingUsers.includes(uid)
-                    ? { uid, ...arrFilter }
-                    : "";
-            }
-
-
-            find = { "uid": { "$in": [uid] }, ...arrFilter };
-
-            // bookings = await bookingModel
-            //     .find(find, { _id: 0, __v: 0 })
-            //     .sort(sort)
-            //     .skip((page - 1) * pageSize)
-            //     .limit(pageSize);
-            bookings = await bookingModel
-            .find(find, { _id: 0, __v: 0 })
-
-            return res.send(bookings);
-        } catch (error) {
-            return res.send({ error });
-        }
+      conditions.push({ uid });
     }
-};
 
-//details data in booking
-bookingController.Details = async (req, res) => {
-    const uid = req.body.uid;
-    const organization_id = req.body.organization_id;
-    const contact_no = req.body.contact_no;
-    const booking_id = req.body.booking_id;
-    try {
-        let find;
-        find = {
-            organization_id,
-            contact_no,
-        }
-        const booking = await bookingModel.find(find);
-        if (booking_id) {
-            const filterBookingData = booking[0]?._doc?.bookingDetails?.filter(list => list.booking_id === booking_id)
-            res.send(filterBookingData);
-        }
-        else {
-            booking[0]?._doc ? res.send(true) : res.send(false)
-        }
+    /** 🚀 Execute aggregation */
+    const bookingCount = await bookingModel.aggregate(aggregationPipeline);
 
-    }
-    catch (error) {
-        res.send({ error });
-    }
-};
-
-//delete data in booking
-bookingController.Delete = async (req, res) => {
-    const id = req.query.id
-    bookingModel
-        .findOneAndDelete({ _id: id })
-        .exec(function (err, result) {
-            if (err) {
-                console.log(err);
-                res.status(500).send(err);
-            } else {
-                res.status(200).send("Deletion DONE!");
-            }
-        });
-};
-
-bookingController.BookingCount = async (req, res) => {
-    const uid = req.body.uid;
-    const filter = req.body.filter;
-    const resultUser = await userModel.find({ uid });
-    if (resultUser.length === 0) {
-        res.send({ error: "User Not Found" });
-    }
-    const user = resultUser[0];
-    const profile = user.profile;
-    const organization_id = user.organization_id;
-    if (profile.toLowerCase() == "lead manager" || profile.toLowerCase() == "admin") {
-        const permission = user.branchPermission;
-        if (
-            permission === undefined ||
-            (permission && permission.length === 0) ||
-            (permission && permission.includes("All"))
-        ) {
-            try {
-                const and = [{ organization_id }];
-                const filterArr = [];
-                if (filter) {
-                    Object.keys(filter).forEach((key) => {
-                        filterArr.push({ [key]: { $in: filter[key] } });
-                    })
-                }
-                let bodyData;
-                if (filterArr.length !== 0) {
-                    const data = [
-                        {
-                            $match: {
-                                $and: and,
-                            },
-                        },
-                        {
-                            $unwind: "$bookingDetails"
-                        },
-                        {
-                            $match: {
-                                $and: filterArr,
-                            },
-                        },
-                        { $group: { _id: { status: "$bookingDetails.status" }, count: { $sum: 1 } } },
-                    ];
-                    bodyData = data;
-                }
-                else {
-                    const data = [
-                        {
-                            $match: {
-                                $and: and,
-                            },
-                        },
-                        {
-                            $unwind: "$bookingDetails"
-                        },
-                        { $group: { _id: { status: "$bookingDetails.status" }, count: { $sum: 1 } } },
-                    ];
-                    bodyData = data;
-                }
-                const count = await bookingModel.aggregate(bodyData);
-                res.send(count);
-            } catch (error) {
-                res.send({ error });
-            }
-        } else {
-            let usersList = await getBranchUsers(
-                uid,
-                organization_id,
-                permission
-            );
-            try {
-                const count = await bookingModel.aggregate([
-                    {
-                        $match: {
-                            uid: { $in: usersList },
-                        },
-                    },
-                    { $group: { _id: "$stage", count: { $sum: 1 } } },
-                ]);
-                res.send(count);
-            } catch (error) {
-                res.send({ error });
-            }
-        }
-    }
-    else if (profile.toLowerCase() == "team lead") {
-        let usersList = await getTeamUsers(
-            uid,
-            organization_id
-        );
-        try {
-            const and = [{ uid: { $in: usersList } }];
-            const filterArr = [];
-            if (filter) {
-                Object.keys(filter).forEach((key) => {
-                    filterArr.push({ [key]: { $in: filter[key] } });
-                })
-            }
-            let bodyData;
-            if (filterArr.length !== 0) {
-                const data = [
-                    {
-                        $match: {
-                            $and: and,
-                        },
-                    },
-                    {
-                        $unwind: "$bookingDetails"
-                    },
-                    {
-                        $match: {
-                            $and: filterArr,
-                        },
-                    },
-                    { $group: { _id: { status: "$bookingDetails.status" }, count: { $sum: 1 } } },
-                ];
-                bodyData = data;
-            }
-            else {
-                const data = [
-                    {
-                        $match: {
-                            $and: and,
-                        },
-                    },
-                    {
-                        $unwind: "$bookingDetails"
-                    },
-                    { $group: { _id: { status: "$bookingDetails.status" }, count: { $sum: 1 } } },
-                ];
-                bodyData = data;
-            }
-            const count = await bookingModel.aggregate(bodyData);
-            res.send(count);
-        } catch (error) {
-            res.send({ error });
-        }
-    }
-    else {
-        try {
-            const and = [{ uid }];
-            const filterArr = [];
-            if (filter) {
-                Object.keys(filter).forEach((key) => {
-                    filterArr.push({ [key]: { $in: filter[key] } });
-                })
-            }
-            let bodyData;
-            if (filterArr.length !== 0) {
-                const data = [
-                    {
-                        $match: {
-                            $and: and,
-                        },
-                    },
-                    {
-                        $unwind: "$bookingDetails"
-                    },
-                    {
-                        $match: {
-                            $and: filterArr,
-                        },
-                    },
-                    { $group: { _id: { status: "$bookingDetails.status" }, count: { $sum: 1 } } },
-                ];
-                bodyData = data;
-            }
-            else {
-                const data = [
-                    {
-                        $match: {
-                            $and: and,
-                        },
-                    },
-                    {
-                        $unwind: "$bookingDetails"
-                    },
-                    { $group: { _id: { status: "$bookingDetails.status" }, count: { $sum: 1 } } },
-                ];
-                bodyData = data;
-            }
-            const count = await bookingModel.aggregate(bodyData);
-            res.send(count);
-        } catch (error) {
-            res.send({ error });
-        }
-    }
+    logger.info(`✅ Booking count retrieved successfully for UID: ${uid}`);
+    return res.status(200).json({
+      success: true,
+      message: "Booking count retrieved successfully",
+      status: 200,
+      data: bookingCount,
+    });
+  } catch (error) {
+    logger.error(`❌ Error fetching booking count: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred",
+      error: error.message,
+      status: 500,
+    });
+  }
 };
 
 module.exports = bookingController;
