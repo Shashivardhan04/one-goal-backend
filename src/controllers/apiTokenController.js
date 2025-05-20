@@ -1,6 +1,7 @@
-var ObjectId = require('mongoose').Types.ObjectId;
-const apiTokenModel = require('../models/apiTokenSchema');
-const crypto = require('crypto');
+var ObjectId = require("mongoose").Types.ObjectId;
+const apiTokenModel = require("../models/apiTokenSchema");
+const logger = require("../services/logger");
+const crypto = require("crypto");
 
 const apiTokenController = {};
 
@@ -10,7 +11,7 @@ const datesField = [
   "stage_change_at",
   "modified_at",
   "lead_assign_time",
-  "call_response_time"
+  "call_response_time",
 ];
 
 // apiTokenController.Insert = (req, res) => {
@@ -56,38 +57,56 @@ const datesField = [
 // };
 
 const generateToken = (length) => {
-  return crypto.randomBytes(Math.ceil(length / 2))
-    .toString('hex') // Convert to hexadecimal format
+  return crypto
+    .randomBytes(Math.ceil(length / 2))
+    .toString("hex") // Convert to hexadecimal format
     .slice(0, length); // Trim to desired length
-}
+};
 
-// Create API token - POST request
+/**
+ * ➕ Create API Token
+ * Adds a new API token to the database with proper validation.
+ */
 apiTokenController.Create = async (req, res) => {
   try {
-    const { organization_id, source, country_code, created_by, modified_by } = req.body;
+    const { organization_id, source, country_code, created_by, modified_by } =
+      req.body;
+
+    /** 🛑 Validate required fields */
     if (!organization_id || !source || !created_by || !modified_by) {
+      logger.warn("⚠️ Missing required fields for API token creation");
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters"
+        message: "Required fields are missing",
+        status: 400,
       });
     }
-    const apiTokenExists = await apiTokenModel.findOne({organization_id,source});
-    if(apiTokenExists){
+
+    /** 🔍 Check for duplicate source */
+    const apiTokenExists = await apiTokenModel.findOne({
+      organization_id,
+      source,
+    });
+    if (apiTokenExists) {
+      logger.warn(`⚠️ API token already exists for source: ${source}`);
       return res.status(400).json({
         success: false,
         message: "Source already exists",
-        error: "Source already exists",
+        status: 400,
       });
     }
 
-    if(source == "Self Generated"){
+    /** 🛑 Prevent self-generated lead source */
+    if (source === "Self Generated") {
+      logger.warn("⚠️ Self Generated lead source cannot be created for API");
       return res.status(400).json({
         success: false,
         message: "Self Generated lead source cannot be created for API",
-        error: "Self Generated lead source cannot be created for API",
+        status: 400,
       });
     }
 
+    /** 🚀 Generate token and save to database */
     const token = generateToken(20);
     const apiToken = await apiTokenModel.create({
       organization_id,
@@ -95,257 +114,414 @@ apiTokenController.Create = async (req, res) => {
       country_code,
       created_by,
       modified_by,
-      token
+      token,
     });
-    // res.status(201).json(apiToken);
+
+    logger.info(`✅ API token created successfully for source: ${source}`);
     return res.status(201).json({
       success: true,
-      message: "API Token created successfully"
+      message: "API Token created successfully",
+      status: 201,
+      data: apiToken,
     });
   } catch (error) {
-    // console.log("error api token",error);
-    // res.status(400).json({ error: error.message });
-    return res.status(400).json({
+    logger.error(`❌ Error creating API token: ${error.message}`);
+    return res.status(500).json({
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred",
       error: error.message,
+      status: 500,
     });
   }
-}
+};
 
-// Get all API tokens - GET request
+/**
+ * 📊 Fetch All API Tokens
+ * Retrieves a list of stored API tokens with filtering, pagination, and sorting.
+ */
 apiTokenController.FetchAll = async (req, res) => {
   try {
-    let parsedFilters = {};
-    const { organization_id, page, limit, sort, filters, search } = req.query;
+    const {
+      organization_id,
+      page = 1,
+      limit = 10,
+      sort,
+      filters,
+      search,
+    } = req.query;
+
+    /** 🛑 Validate required fields */
     if (!organization_id) {
+      logger.warn(
+        "⚠️ Missing required organization ID for fetching API tokens"
+      );
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters",
-        error: "Missing required parameters",
+        message: "Organization ID is required",
+        status: 400,
       });
     }
+
+    logger.info(
+      `📡 Fetching API tokens for Organization ID: ${organization_id}`
+    );
+
+    /** 🔄 Process filters */
+    let parsedFilters = {};
     if (filters) {
-      parsedFilters = JSON.parse(filters);
-      for (const key of Object.keys(parsedFilters)) {
-        if (datesField.includes(key)) {
-          if (parsedFilters[key].length && parsedFilters[key].length === 2) {
-            parsedFilters[key] = {
-              $gte: new Date(parsedFilters[key][0]),
-              $lte: new Date(parsedFilters[key][1]),
-            };
-          }
-        }
-        else {
-          parsedFilters[key] = { $in: parsedFilters[key] };
-        }
+      try {
+        parsedFilters = JSON.parse(filters);
+        Object.keys(parsedFilters).forEach((key) => {
+          parsedFilters[key] = Array.isArray(parsedFilters[key])
+            ? { $in: parsedFilters[key] }
+            : parsedFilters[key];
+        });
+      } catch (error) {
+        logger.warn("⚠️ Invalid filters format");
+        return res.status(400).json({
+          success: false,
+          message: "Invalid filters format",
+          status: 400,
+        });
       }
     }
+
+    /** 🔎 Search functionality */
     if (search) {
-      parsedFilters["source"] = { $regex: new RegExp(search, 'i') };
+      parsedFilters["source"] = { $regex: new RegExp(search, "i") };
     }
-    // Convert page and limit to integers
+
+    /** 🚀 Pagination setup */
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
-
-    if (pageNumber) {
-      if (isNaN(pageNumber) || pageNumber < 1) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid page value",
-          error: "Invalid page value",
-        });
-      }
+    if (
+      isNaN(pageNumber) ||
+      pageNumber < 1 ||
+      isNaN(limitNumber) ||
+      limitNumber < 1
+    ) {
+      logger.warn("⚠️ Invalid pagination values");
+      return res.status(400).json({
+        success: false,
+        message: "Invalid pagination values",
+        status: 400,
+      });
     }
-
-    if (limitNumber) {
-      if (isNaN(limitNumber) || limitNumber < 1) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid limit value",
-          error: "Invalid limit value"
-        });
-      }
-    }
-
     const skip = (pageNumber - 1) * limitNumber;
-    let parsedSort;
+
+    /** 🔄 Sorting setup */
+    let parsedSort = {};
     if (sort) {
       try {
         parsedSort = JSON.parse(sort);
       } catch (error) {
+        logger.warn("⚠️ Invalid sort format");
         return res.status(400).json({
           success: false,
-          message: "Invalid  parameter",
-          error: error.message
+          message: "Invalid sort format",
+          status: 400,
         });
       }
     }
-    // console.log("page", parsedFilters, parsedSort, skip, limitNumber);
-    const apiTokensData = await apiTokenModel.find({ organization_id: organization_id, ...parsedFilters }, { __v: 0 }).lean()
+
+    /** 🚀 Execute query */
+    const apiTokensData = await apiTokenModel
+      .find({ organization_id, ...parsedFilters }, { __v: 0 })
+      .lean()
       .sort(parsedSort)
       .skip(skip)
       .limit(limitNumber);
-    const apiTokensCount = await apiTokenModel.countDocuments({ organization_id, ...parsedFilters });
+
+    const apiTokensCount = await apiTokenModel.countDocuments({
+      organization_id,
+      ...parsedFilters,
+    });
+
+    logger.info(
+      `✅ API tokens fetched successfully for Organization ID: ${organization_id}`
+    );
     return res.status(200).json({
       success: true,
-      message: "API Data fetched successfully",
-      data: {
-        apiTokensData,
-        apiTokensCount
-      }
+      message: "API data retrieved successfully",
+      status: 200,
+      data: { apiTokensData, apiTokensCount },
     });
   } catch (error) {
-    return res.status(400).json({
+    logger.error(`❌ Error fetching API tokens: ${error.message}`);
+    return res.status(500).json({
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred",
       error: error.message,
+      status: 500,
     });
   }
 };
 
-// Get a single API token by ID - GET request
+/**
+ * 🔍 Fetch Single API Token
+ * Retrieves a specific API token based on the provided token parameter.
+ */
 apiTokenController.FetchToken = async (req, res) => {
   try {
     const { token } = req.params;
+
+    /** 🛑 Validate required field */
     if (!token) {
+      logger.warn("⚠️ Missing required token for API token fetch");
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters"
+        message: "Token parameter is required",
+        status: 400,
       });
     }
-    const apiToken = await apiTokenModel.findOne({ token });
+
+    logger.info(`📡 Fetching API token for token: ${token}`);
+
+    /** 🚀 Execute query */
+    const apiToken = await apiTokenModel.findOne({ token }).lean();
+
+    /** 🛑 Handle case where token is not found */
+    if (!apiToken) {
+      logger.warn(`⚠️ No API token found for token: ${token}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "API token not found", status: 404 });
+    }
+
+    logger.info(`✅ API token retrieved successfully for token: ${token}`);
     return res.status(200).json({
       success: true,
-      message: "API Data fetched successfully",
-      data: apiToken
+      message: "API token retrieved successfully",
+      status: 200,
+      data: apiToken,
     });
   } catch (error) {
-    return res.status(400).json({
+    logger.error(`❌ Error fetching API token: ${error.message}`);
+    return res.status(500).json({
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred",
       error: error.message,
+      status: 500,
     });
   }
 };
 
-// Update API token by ID - PUT request
+/**
+ * 🔄 Update API Token
+ * Modifies an existing API token in the database with validation and logging.
+ */
 apiTokenController.Update = async (req, res) => {
   try {
+    const { id, organization_id, data: updateData } = req.body;
 
-    const updateData = req.body.data;
-    updateData.modified_at = new Date();
-    const id = req.body.id;
-    const organization_id = req.body.organization_id;
-    if (!id) {
+    /** 🛑 Validate required fields */
+    if (!id || !organization_id || !updateData) {
+      logger.warn("⚠️ Missing required fields for API token update");
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters"
+        message: "Required fields are missing",
+        status: 400,
       });
     }
 
-    const apiTokenExists = await apiTokenModel.findOne({organization_id, source: updateData.source });
-    if(apiTokenExists){
+    /** 🛑 Validate MongoDB ObjectId format */
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      logger.warn(`⚠️ Invalid ObjectId format: ${id}`);
+      return res.status(400).json({
+        success: false,
+        message: "Invalid token ID format",
+        status: 400,
+      });
+    }
+
+    /** 🛑 Prevent duplicate source entries */
+    const apiTokenExists = await apiTokenModel.findOne({
+      organization_id,
+      source: updateData.source,
+    });
+    if (apiTokenExists) {
+      logger.warn(
+        `⚠️ API token already exists for source: ${updateData.source}`
+      );
       return res.status(400).json({
         success: false,
         message: "Source already exists",
-        error: "Source already exists",
+        status: 400,
       });
     }
 
-    if(updateData.source == "Self Generated"){
+    /** 🛑 Prevent "Self Generated" lead source */
+    if (updateData.source === "Self Generated") {
+      logger.warn("⚠️ Self Generated lead source cannot be created for API");
       return res.status(400).json({
         success: false,
         message: "Self Generated lead source cannot be created for API",
-        error: "Self Generated lead source cannot be created for API",
+        status: 400,
       });
     }
 
+    /** 🔄 Update timestamp */
+    updateData.modified_at = new Date();
+
+    logger.info(`📡 Updating API token with ID: ${id}`);
+
+    /** 🚀 Execute update */
     const apiToken = await apiTokenModel.findOneAndUpdate(
       { _id: id },
       { $set: updateData },
       { new: true }
     );
+
+    /** 🛑 Handle missing API token */
+    if (!apiToken) {
+      logger.warn(`⚠️ API token not found for ID: ${id}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "API token not found", status: 404 });
+    }
+
+    logger.info(`✅ API token updated successfully for ID: ${id}`);
     return res.status(200).json({
       success: true,
-      message: "API Data updated successfully",
-      data: apiToken
+      message: "API token updated successfully",
+      status: 200,
+      data: apiToken,
     });
   } catch (error) {
-    return res.status(400).json({
+    logger.error(`❌ Error updating API token: ${error.message}`);
+    return res.status(500).json({
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred",
       error: error.message,
+      status: 500,
     });
   }
 };
 
-// Delete API token by ID - DELETE request
+/**
+ * ❌ Delete API Token
+ * Removes an existing API token from the database.
+ */
 apiTokenController.Delete = async (req, res) => {
   try {
     const { id } = req.params;
+
+    /** 🛑 Validate required field */
     if (!id) {
+      logger.warn("⚠️ Missing required token ID for deletion");
+      return res
+        .status(400)
+        .json({ success: false, message: "Token ID is required", status: 400 });
+    }
+
+    /** 🛑 Validate MongoDB ObjectId format */
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      logger.warn(`⚠️ Invalid ObjectId format: ${id}`);
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters"
+        message: "Invalid token ID format",
+        status: 400,
       });
     }
+
+    logger.info(`📡 Deleting API token with ID: ${id}`);
+
+    /** 🚀 Execute deletion */
     const deletedToken = await apiTokenModel.findByIdAndDelete(id);
+
+    /** 🛑 Handle case where token is not found */
     if (!deletedToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Token not found",
-      });
+      logger.warn(`⚠️ API token not found for ID: ${id}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "API token not found", status: 404 });
     }
+
+    logger.info(`✅ API token deleted successfully for ID: ${id}`);
     return res.status(200).json({
       success: true,
-      message: "API Token deleted successfully"
+      message: "API token deleted successfully",
+      status: 200,
     });
   } catch (error) {
-    return res.status(400).json({
+    logger.error(`❌ Error deleting API token: ${error.message}`);
+    return res.status(500).json({
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred",
       error: error.message,
+      status: 500,
     });
   }
 };
 
-// Get all API tokens - GET request
+/**
+ * 🔎 Filter API Tokens
+ * Retrieves distinct values for filtering API tokens based on query parameters.
+ */
 apiTokenController.FilterValues = async (req, res) => {
   try {
     const { organization_id } = req.query;
+
+    /** 🛑 Validate required field */
     if (!organization_id) {
+      logger.warn(
+        "⚠️ Missing required organization ID for filtering API tokens"
+      );
       return res.status(400).json({
         success: false,
-        message: "Missing required parameters"
+        message: "Organization ID is required",
+        status: 400,
       });
     }
-    const groupStage = {
-      $group: {
-        _id: null,
-        token: { $addToSet: "$token" },
-        country_code: { $addToSet: "$country_code" },
-        status: { $addToSet: "$status" },
-        source: { $addToSet: "$source" },
-      }
+
+    logger.info(
+      `📡 Fetching filter values for API tokens in Organization ID: ${organization_id}`
+    );
+
+    /** 🔄 Define aggregation pipeline */
+    const filterValuesForAPITokens = await apiTokenModel.aggregate([
+      { $match: { organization_id } },
+      {
+        $group: {
+          _id: null,
+          token: { $addToSet: "$token" },
+          country_code: { $addToSet: "$country_code" },
+          status: { $addToSet: "$status" },
+          source: { $addToSet: "$source" },
+        },
+      },
+    ]);
+
+    /** 🛑 Handle case where no data is found */
+    if (!filterValuesForAPITokens.length) {
+      logger.warn(
+        `⚠️ No filter values found for Organization ID: ${organization_id}`
+      );
+      return res.status(404).json({
+        success: false,
+        message: "No filter values found",
+        status: 404,
+      });
     }
 
-    const filterValuesForAPITokens = await apiTokenModel.aggregate([
-      {
-        $match: { organization_id }
-      },
-      groupStage
-    ])
+    logger.info(
+      `✅ Filter values fetched successfully for Organization ID: ${organization_id}`
+    );
     return res.status(200).json({
       success: true,
-      message: "Filter Values fetched successfully",
-      data: filterValuesForAPITokens
+      message: "Filter values retrieved successfully",
+      status: 200,
+      data: filterValuesForAPITokens,
     });
   } catch (error) {
-    return res.status(400).json({
+    logger.error(
+      `❌ Error fetching filter values for API tokens: ${error.message}`
+    );
+    return res.status(500).json({
       success: false,
-      message: "An error occured, Please try again",
+      message: "An error occurred",
       error: error.message,
+      status: 500,
     });
   }
 };

@@ -1,138 +1,50 @@
-const express = require('express');
-const userListController = require('../controllers/userListsController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
+const userListController = require("../controllers/userListsController");
 
+const router = express.Router();
+
+// Destructure controller functions for cleaner usage
 const { Insert, Update } = userListController;
 
 /**
- * @openapi
- * /userList:
- *   get:
- *     summary: Get User List
- *     description: Retrieve a list of users.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   description: A message indicating you are in the user list.
- *             example:
- *               message: "You are in the user list"
- *     tags:
- *       - userList
+ * Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.get('/', (req, res) => res.send('you are in userList'));
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      status: 500,
+    });
+  }
+};
 
 /**
- * @openapi
- * /userList/Create:
- *   post:
- *     summary: Create a New User
- *     description: Create a new user with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               username:
- *                 type: string
- *               email:
- *                 type: string
- *             example:
- *               username: "NewUser"
- *               email: "newuser@example.com"
- *     responses:
- *       201:
- *         description: User created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the user.
- *     tags:
- *       - userList
+ * 🧪 Health Check Route
+ * Confirms that the User List API is accessible.
  */
-router.post('/Create', Insert);
+router.get("/", (req, res) => {
+  logger.info("🟢 /userList - Health check route hit");
+  res.send("You are in userList");
+});
 
 /**
- * @openapi
- * /userList/Update:
- *   post:
- *     summary: Update User
- *     description: Update user information with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 description: The ID of the user to update.
- *               updatedData:
- *                 type: object
- *                 description: Updated user data.
- *             example:
- *               userId: "12345"
- *               updatedData: { /* updated user data * / }
- *     responses:
- *       200:
- *         description: User updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the user update.
- *     tags:
- *       - userList
+ * ➕ Create User List Entry
+ * Inserts a new user list entry into the system.
  */
-router.post('/Update', Update);
+router.post("/create", asyncHandler(Insert));
+
+/**
+ * 🔄 Update User List Entry
+ * Modifies an existing user list entry.
+ */
+router.post("/update", asyncHandler(Update));
 
 module.exports = router;

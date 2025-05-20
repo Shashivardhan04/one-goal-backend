@@ -1,139 +1,50 @@
-const express = require('express');
-const contactResoController = require('../controllers/contactResourceController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
+const contactResoController = require("../controllers/contactResourceController");
 
+const router = express.Router();
+
+// Destructure controller methods for cleaner usage
 const { Insert, Update } = contactResoController;
 
 /**
- * @openapi
- * /contactResources:
- *   get:
- *     summary: Get Contact Resources Information
- *     description: Retrieve information about contact resources.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   description: A message indicating you are in contact resources.
- *             example:
- *               message: "You are in contact resources"
- *     tags:
- *       - contactResources
+ * 🛠 Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.get('/', (req, res) => res.send('you are in contactResources'));
-
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
 /**
- * @openapi
- * /contactResources/Create:
- *   post:
- *     summary: Create a New Item
- *     description: Create a new item with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               itemName:
- *                 type: string
- *                 description: The name of the new item.
- *             example:
- *               itemName: "New Item Name"
- *     responses:
- *       201:
- *         description: Item created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the new item.
- *     tags:
- *       - contactResources
+ * 🧪 Health Check Route
+ * Confirms the Contact Resources API is accessible.
  */
-router.post('/Create', Insert);
-
+router.get("/", (req, res) => {
+  logger.info("🟢 /contactResources - Health check route hit");
+  res.send("You are in contactResources");
+});
 
 /**
- * @openapi
- * /contactResources/Update:
- *   post:
- *     summary: Update an Item
- *     description: Update an existing item with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               itemId:
- *                 type: string
- *                 description: The ID of the item to update.
- *               itemName:
- *                 type: string
- *                 description: The updated name of the item.
- *             example:
- *               itemId: "12345"
- *               itemName: "Updated Item Name"
- *     responses:
- *       200:
- *         description: Item updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the updated item.
- *     tags:
- *       - contactResources
+ * ➕ Insert Contact Resource
+ * Adds a new contact resource to the database.
  */
-router.post('/Update', Update);
+router.post("/create", asyncHandler(Insert));
 
+/**
+ * 🔄 Update Contact Resource
+ * Modifies an existing contact resource.
+ */
+router.post("/update", asyncHandler(Update));
 
 module.exports = router;
