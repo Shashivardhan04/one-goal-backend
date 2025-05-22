@@ -5,62 +5,74 @@ const leadModel = require("../models/leadsSchema");
 const Notification = require("../models/notificationModel");
 const admin = require("../../firebaseAdmin");
 const moment = require("moment");
+const logger = require("../services/logger");
 
 const autoRotationController = {};
 
 ////////////////// trigger for leadShuffling ///////////////////////////
 
-const sendNotification = async (organization_id, uid, leadId,contactNumber) => {
-try{
-  // console.log("send notification",organization_id, uid, leadId,contactNumber)
-  // const fcmTokens = (
-  //   await admin.firestore().collection("fcmTokens").doc(organization_id).get()
-  // ).data();
-  // if (fcmTokens && fcmTokens[uid] && fcmTokens[uid] !== "") {
-  //   admin.messaging().sendToDevice(
-  //     fcmTokens[uid],
-  //     {
-  //       notification: {
-  //         title: "Lead expiring soon! ☹️",
-  //         body: `A new API lead ${contactNumber} is here. Please take immediate action or this will be auto rotated.`,
-  //         sound: "default",
-  //       },
-  //       data: {
-  //         Id: leadId,
-  //       },
-  //     },
-  //     { contentAvailable: false, priority: "high" }
-  //   );
-  // }
-  const user = await userModel.findOne({ uid });
-  if (user && user["fcm_token"] && user["fcm_token"] !== "") {
-    admin.messaging().sendToDevice(
-      user["fcm_token"],
-      {
-        notification: {
-          title: "Lead expiring soon! ☹️",
-          body: `A new API lead ${contactNumber} is here. Please take immediate action or this will be auto rotated.`,
-          sound: "default",
+const sendNotification = async (
+  organization_id,
+  uid,
+  leadId,
+  contactNumber
+) => {
+  try {
+    // console.log("send notification",organization_id, uid, leadId,contactNumber)
+    // const fcmTokens = (
+    //   await admin.firestore().collection("fcmTokens").doc(organization_id).get()
+    // ).data();
+    // if (fcmTokens && fcmTokens[uid] && fcmTokens[uid] !== "") {
+    //   admin.messaging().sendToDevice(
+    //     fcmTokens[uid],
+    //     {
+    //       notification: {
+    //         title: "Lead expiring soon! ☹️",
+    //         body: `A new API lead ${contactNumber} is here. Please take immediate action or this will be auto rotated.`,
+    //         sound: "default",
+    //       },
+    //       data: {
+    //         Id: leadId,
+    //       },
+    //     },
+    //     { contentAvailable: false, priority: "high" }
+    //   );
+    // }
+    const user = await userModel.findOne({ uid });
+    if (user && user["fcm_token"] && user["fcm_token"] !== "") {
+      admin.messaging().sendToDevice(
+        user["fcm_token"],
+        {
+          notification: {
+            title: "Lead expiring soon! ☹️",
+            body: `A new API lead ${contactNumber} is here. Please take immediate action or this will be auto rotated.`,
+            sound: "default",
+          },
+          data: {
+            Id: leadId,
+          },
         },
-        data: {
-          Id: leadId,
-        },
-      },
-      { contentAvailable: false, priority: "high" }
-    );
+        { contentAvailable: false, priority: "high" }
+      );
+    }
+  } catch (err) {
+    console.log("notification not sent", err);
   }
-}catch(err){
-  console.log("notification not sent",err);
-}
 };
 
 const createNotification = async (
   uid,
   notification_title,
   notification_description,
-  organization_id,
+  organization_id
 ) => {
-  console.log("create notification", uid,notification_title,notification_description,organization_id)
+  console.log(
+    "create notification",
+    uid,
+    notification_title,
+    notification_description,
+    organization_id
+  );
   let date = moment();
   if (
     uid &&
@@ -91,16 +103,16 @@ const addMinutesToCurrentDate = (minutes) => {
   const currentDate = moment();
 
   // Add the specified number of minutes
-  const newDate = currentDate.add(minutes, 'minutes');
+  const newDate = currentDate.add(minutes, "minutes");
 
   // Return the new date
   return newDate.toDate();
-}
+};
 
 const leadRotate = async (leadData) => {
   // console.log("lead dta",leadData)
   try {
-    if(new Date() > leadData.nextRotationAt){
+    if (new Date() > leadData.nextRotationAt) {
       // let leadIds = [];
       // for (let i = 0; i < leadsData.length; i++) {
       // const leadData = leadsData[i];
@@ -165,7 +177,9 @@ const leadRotate = async (leadData) => {
           : "",
         previous_stage_2: leadData.stage,
         organization_id: leadData.organization_id,
-        nextRotationAt: addMinutesToCurrentDate(leadDistributionData.autoRotationTime)
+        nextRotationAt: addMinutesToCurrentDate(
+          leadDistributionData.autoRotationTime
+        ),
       };
 
       oldData = {
@@ -174,7 +188,7 @@ const leadRotate = async (leadData) => {
         source_status: old_source_status,
         transfer_reason: "Auto Rotated Lead",
         modified_at: new Date(),
-        autoRotationEnabled: "OFF"
+        autoRotationEnabled: "OFF",
       };
       delete oldData.created_at;
       delete oldData.stage_change_at;
@@ -230,7 +244,7 @@ const leadRotate = async (leadData) => {
         leadData.organization_id
       );
       console.log("Lead successfully auto rotated", newData, oldData);
-    }else{
+    } else {
       console.log("The time is less");
     }
   } catch (err) {
@@ -238,45 +252,83 @@ const leadRotate = async (leadData) => {
   }
 };
 
-autoRotationController.autoRotateLeads = async (req,res) => {
+/**
+ * 🔄 Auto-Rotate Leads
+ * Automatically rotates leads based on distribution logic and conditions.
+ */
+autoRotationController.autoRotateLeads = async (req, res) => {
   try {
-    const distributionlogics = await leadDistributionModel.find({
+    logger.info("📡 Fetching distribution logics with auto rotation enabled");
+
+    /** 🔎 Retrieve all distribution logics where auto rotation is enabled */
+    const distributionLogics = await leadDistributionModel.find({
       autoRotationEnabled: "ON",
     });
 
-    const distributionId = distributionlogics.map((val) => val._id);
+    /** 🚀 Extract distribution IDs */
+    const distributionIds = distributionLogics.map(({ _id }) => _id);
 
-    // console.log("lead distribution Id",distributionId);
+    if (distributionIds.length === 0) {
+      logger.warn("⚠️ No distribution logics found with auto rotation enabled");
+      return res
+        .status(200)
+        .json({
+          success: true,
+          message: "No leads eligible for auto rotation",
+          status: 200,
+        });
+    }
 
-    const leadData = await leadModel.find(
-      {
-        leadDistributionId: { $in: distributionId },
-        stage: "FRESH",
-        autoRotationEnabled: "ON",
-        transfer_status: false,
-      },
-      { __v: 0, _id: 0 }
-    ).lean();
+    logger.info(
+      `📊 Found ${distributionIds.length} distribution logics with auto rotation`
+    );
 
-    // console.log("leads data to auto rotate",leadData);
-    leadData.map(async (item) => {
-      await leadRotate(item);
-    })
+    /** 🔎 Retrieve leads eligible for rotation */
+    const leadsData = await leadModel
+      .find(
+        {
+          leadDistributionId: { $in: distributionIds },
+          stage: "FRESH",
+          autoRotationEnabled: "ON",
+          transfer_status: false,
+        },
+        { __v: 0, _id: 0 }
+      )
+      .lean();
 
-    return res.status(200).json({
-      success: true,
-      message: "Auto Rotation Completed"
-  });
+    if (leadsData.length === 0) {
+      logger.warn("⚠️ No leads eligible for rotation");
+      return res
+        .status(200)
+        .json({
+          success: true,
+          message: "No leads eligible for auto rotation",
+          status: 200,
+        });
+    }
+
+    logger.info(`🔄 Initiating auto-rotation for ${leadsData.length} leads`);
+
+    /** 🚀 Perform lead rotations */
+    await Promise.all(leadsData.map(async (item) => leadRotate(item)));
+
+    logger.info(`✅ Auto rotation completed successfully`);
+    return res
+      .status(200)
+      .json({ success: true, message: "Auto Rotation Completed", status: 200 });
   } catch (error) {
-    console.log("Error in transferring lead during auto rotation", err);
-    return res.status(400).json({
-      success: false,
-      message: "An error occured, while trying to auto rotate leads"
-  });
+    logger.error(`❌ Error in auto rotating leads: ${error.message}`);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "An error occurred while auto rotating leads",
+        status: 500,
+        error: error.message,
+      });
   }
 };
 
 module.exports = autoRotationController;
 
 ////////////////////////////////////////////////////////////////
-

@@ -1,103 +1,41 @@
-const express = require('express');
-const lastDialedCallLogController = require('../controllers/lastDialedCallLogController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
+const lastDialedCallLogController = require("../controllers/lastDialedCallLogController");
 
-const {create,fetchAndVerify} = lastDialedCallLogController;
+const router = express.Router();
 
-
-
-/**
- * @openapi
- * /lastDialedCall/create:
- *   post:
- *     summary: Create a New Item
- *     description: Create a new item with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               property1:
- *                 type: string
- *                 description: The value of property 1.
- *             example:
- *               property1: "Example Property Value"
- *     responses:
- *       201:
- *         description: Item created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the new item.
- *     tags:
- *       - lastDialedCall
- */
-router.post('/create', create);
-
+// Destructure controller methods for cleaner usage
+const { create, fetchAndVerify } = lastDialedCallLogController;
 
 /**
- * @openapi
- * /lastDialedCall/fetchAndVerify:
- *   post:
- *     summary: Fetch and Verify Data
- *     description: Fetch and verify data based on specific criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               criteria:
- *                 type: string
- *                 description: The criteria for data retrieval and verification.
- *             example:
- *               criteria: "Your criteria here"
- *     responses:
- *       200:
- *         description: Data fetched and verified successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   description: Indicates if the operation was successful.
- *                 data:
- *                   type: object
- *                   description: Additional data related to the fetched and verified data.
- *     tags:
- *       - lastDialedCall
+ * 🛠 Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.post('/fetchAndVerify', fetchAndVerify);
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
+/**
+ * 📞 Create Last Dialed Call Log
+ * Stores call log data in the database.
+ */
+router.post("/create", asyncHandler(create));
+
+/**
+ * 🔍 Fetch & Verify Last Dialed Call Log
+ * Retrieves and verifies the last call log based on given parameters.
+ */
+router.post("/fetchAndVerify", asyncHandler(fetchAndVerify));
 
 module.exports = router;

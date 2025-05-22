@@ -1,13 +1,50 @@
-const express = require('express');
-const dataUploadRequestController = require('../controllers/dataUploadRequestController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
+const dataUploadRequestController = require("../controllers/dataUploadRequestController");
 
-const { FetchAll,UploadContacts,UploadProjects } = dataUploadRequestController;
+const router = express.Router();
 
-router.get('/fetchAll', FetchAll);
+/**
+ * 🛠 Utility function to handle async routes gracefully.
+ * Prevents repetitive try-catch blocks by centralizing error handling.
+ */
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
-router.post('/uploadContacts', UploadContacts);
+/**
+ * 📂 Fetch All Data Upload Requests
+ * Handles fetching all uploaded data requests.
+ */
+router.get("/fetchAll", asyncHandler(dataUploadRequestController.FetchAll));
 
-router.post('/uploadProjects', UploadProjects);
+/**
+ * 📤 Upload Contacts
+ * Handles uploading contact data.
+ */
+router.post(
+  "/uploadContacts",
+  asyncHandler(dataUploadRequestController.UploadContacts)
+);
+
+/**
+ * 🏗 Upload Projects
+ * Handles uploading project data.
+ */
+router.post(
+  "/uploadProjects",
+  asyncHandler(dataUploadRequestController.UploadProjects)
+);
 
 module.exports = router;
