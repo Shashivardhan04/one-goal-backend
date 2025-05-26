@@ -1,0 +1,19 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 18  # Update based on app requirement
+    commands:
+      - echo Installing dependencies...
+      - npm install  # or `yarn install` if applicable
+
+  build:
+    commands:
+      - echo Build started...
+      - npm run build  # or your build script
+
+artifacts:
+  files:
+    - '**/*'
+  discard-paths: no
