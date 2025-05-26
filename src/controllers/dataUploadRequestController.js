@@ -1,4 +1,4 @@
-const dataUploadRequestModel = require('../models/dataUploadRequestSchema');
+const dataUploadRequestModel = require("../models/dataUploadRequestSchema");
 var ObjectId = require("mongoose").Types.ObjectId;
 const express = require("express");
 const https = require("https");
@@ -9,36 +9,41 @@ const storage = require("firebase/storage");
 var router = express.Router();
 const admin = require("../../firebaseAdmin");
 const leadModel = require("../models/leadsSchema");
-const contactResourcesMongoModel = require('../models/contactResourcesMongoSchema');
+const contactResourcesMongoModel = require("../models/contactResourcesMongoSchema");
 const leadDistributionModel = require("../models/leadDistributionSchema");
 const projectsModel = require("../models/projectsSchema");
 const moment = require("moment");
-const AWS = require('aws-sdk');
-const crypto = require('crypto');
+const AWS = require("aws-sdk");
+const crypto = require("crypto");
 const userModel = require("../models/userSchema");
-const organResourcesModel = require('../models/organizationResourcesSchema');
-const { sendNotificationsToMultipleUsers, sendNotificationToSingleUser } = require('../functions/sendNotification');
-const {sendNotificationForNewProject}=require("../functions/projectNotification")
+const organResourcesModel = require("../models/organizationResourcesSchema");
+const {
+  sendNotificationsToMultipleUsers,
+  sendNotificationToSingleUser,
+} = require("../functions/sendNotification");
+const {
+  sendNotificationForNewProject,
+} = require("../functions/projectNotification");
+const logger = require("../services/logger");
 
-
- const isValidMobile = (mobile) => {
+const isValidMobile = (mobile) => {
   // Check if the mobile number is numeric and has a length between 10 and 15
   if (!/^\d{7,15}$/.test(mobile)) {
-      return  "Mobile number should be of min. 7 digits. Please re-enter" ;
+    return "Mobile number should be of min. 7 digits. Please re-enter";
   }
 
   // Check if the mobile number starts with a 0
   if (mobile.startsWith("0")) {
-      return "Mobile number should not start with 0. Please re-enter.";
+    return "Mobile number should not start with 0. Please re-enter.";
   }
 
   return "";
-}
+};
 // Set up AWS credentials and S3 configuration
 AWS.config.update({
   accessKeyId: process.env.AWS_ACCESS_KEY,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  region: process.env.AWS_BUCKET_REGION
+  region: process.env.AWS_BUCKET_REGION,
 });
 
 // Create an S3 instance
@@ -49,26 +54,26 @@ const uploadFileToS3 = async (request_id, Key) => {
     const params = {
       Bucket: process.env.AWS_BUCKET_NAME,
       Key: Key, // Specify the key (filename) for the file in S3
-      Body: fs.createReadStream(`${request_id}.csv`)
+      Body: fs.createReadStream(`${request_id}.csv`),
     };
     const data = await s3.upload(params).promise();
     return data.Location;
   } catch (error) {
     throw error;
   }
-}
+};
 
 const generateS3KeyName = (Id, name) => {
   // Construct key for the uploaded file
   const date = new Date();
   const year = date.getFullYear();
-  const month = ('0' + (date.getMonth() + 1)).slice(-2); // Add leading zero if month is single digit
+  const month = ("0" + (date.getMonth() + 1)).slice(-2); // Add leading zero if month is single digit
   let fileId = new ObjectId();
   let fileName = `${fileId}-${name}`;
-  // const fileFormat = req.file.mimetype.split('/')[1]; 
+  // const fileFormat = req.file.mimetype.split('/')[1];
   let key = `readpro/${year}/${month}/${Id}/${fileName}`;
   return key;
-}
+};
 
 const bucket = admin.storage().bucket();
 
@@ -80,7 +85,7 @@ const datesField = [
   "stage_change_at",
   "modified_at",
   "lead_assign_time",
-  "call_response_time"
+  "call_response_time",
 ];
 
 const fields = [
@@ -116,7 +121,7 @@ const contactImportFields = [
   "Campaign",
   "Notes",
   "State",
-]
+];
 
 const projectField = [
   "Project Name",
@@ -155,28 +160,40 @@ const createProjectDataToInsert = async (
 
   let projectsData = await projectsModel.find({ organization_id });
   if (projectsData) {
-    const oldDataPojectName = new Set(projectsData.map(({ project_name }) => project_name));
+    const oldDataPojectName = new Set(
+      projectsData.map(({ project_name }) => project_name)
+    );
     uniqueProjectData = [
-      ...projectList.filter((item) => !oldDataPojectName.has(item["Project Name"]))
+      ...projectList.filter(
+        (item) => !oldDataPojectName.has(item["Project Name"])
+      ),
     ];
 
     uniqueProjectData?.map((list) => {
-      if (("Project Name" in list) && ("Address" in list) && ("Developer Name" in list) && ("Property Type" in list) && ("Project Status" in list) && ("Property Stage" in list) && ("Rera Link" in list) && ("Walkthrough Link" in list)) {
-        return bulkProjects.push(
-          {
-            "project_name": list["Project Name"].trim(),
-            "developer_name": list["Developer Name"].trim(),
-            "address": list["Address"],
-            "property_type": list["Property Type"],
-            "project_status": list["Project Status"],
-            "property_stage": list["Property Stage"],
-            "rera_link": list["Rera Link"],
-            "walkthrough_link": list["Walkthrough Link"],
-            "organization_id": organization_id,
-            "modified_by": created_by,
-            "created_by": created_by,
-            "project_id": new ObjectId()
-          });
+      if (
+        "Project Name" in list &&
+        "Address" in list &&
+        "Developer Name" in list &&
+        "Property Type" in list &&
+        "Project Status" in list &&
+        "Property Stage" in list &&
+        "Rera Link" in list &&
+        "Walkthrough Link" in list
+      ) {
+        return bulkProjects.push({
+          project_name: list["Project Name"].trim(),
+          developer_name: list["Developer Name"].trim(),
+          address: list["Address"],
+          property_type: list["Property Type"],
+          project_status: list["Project Status"],
+          property_stage: list["Property Stage"],
+          rera_link: list["Rera Link"],
+          walkthrough_link: list["Walkthrough Link"],
+          organization_id: organization_id,
+          modified_by: created_by,
+          created_by: created_by,
+          project_id: new ObjectId(),
+        });
       }
     });
   }
@@ -184,31 +201,31 @@ const createProjectDataToInsert = async (
 
 const validateContactCSVHeaders = (headers) => {
   let isCSVHeaderValid = true;
-  headers.forEach(header => {
+  headers.forEach((header) => {
     if (!contactImportFields.includes(header)) {
       isCSVHeaderValid = false;
     }
-  })
-  contactImportFields.forEach(field => {
+  });
+  contactImportFields.forEach((field) => {
     if (!headers.includes(field)) {
       isCSVHeaderValid = false;
     }
-  })
+  });
   return isCSVHeaderValid;
 };
 
 const validateProjectCSVHeaders = (headers) => {
   let isCSVHeaderValid = true;
-  headers.forEach(header => {
+  headers.forEach((header) => {
     if (!projectImportFields.includes(header)) {
       isCSVHeaderValid = false;
     }
-  })
-  projectImportFields.forEach(field => {
+  });
+  projectImportFields.forEach((field) => {
     if (!headers.includes(field)) {
       isCSVHeaderValid = false;
     }
-  })
+  });
   return isCSVHeaderValid;
 };
 // const generateToken = (length) => {
@@ -243,9 +260,14 @@ const validateProjectCSVHeaders = (headers) => {
 // };
 
 const getOrganizationResourcesMongo = async (organization_id) => {
-  const resource = await organResourcesModel.findOne({organization_id,resource_type: "leadSources"});
+  const resource = await organResourcesModel.findOne({
+    organization_id,
+    resource_type: "leadSources",
+  });
 
-  const leadSources = (resource?.leadSources || []).map((data) => data.leadSource);
+  const leadSources = (resource?.leadSources || []).map(
+    (data) => data.leadSource
+  );
   // const budget = (resourcesData?.budgets || []).map((data) => data.budget);
   // const location = (resourcesData?.locations || []).map((data) => data.location_name);
   // const project = (resourcesData?.projects || []).map((data) => data.project_name);
@@ -266,11 +288,11 @@ const getProjects = async (organization_id) => {
   if (projects.length > 0) {
     let projectNames = projects.map((project) => project.project_name);
     return {
-      projectNames
+      projectNames,
     };
   } else {
     return {
-      projectNames: []
+      projectNames: [],
     };
   }
 };
@@ -294,7 +316,7 @@ const getProjects = async (organization_id) => {
 
 const getUserMapMongo = async (organization_id) => {
   let usersMap = {};
-  const userData = await userModel.find({organization_id});
+  const userData = await userModel.find({ organization_id });
   userData.forEach((user) => {
     usersMap[user.user_email] = {
       uid: user.uid,
@@ -315,11 +337,9 @@ const checkProjectName = async (organization_id, chunk, result) => {
     docs.docs.forEach((doc) => {
       const data = doc.data();
       result.push(data.project_name);
-
     });
   }
 };
-
 
 const checkFresh = (contact, resources) => {
   if (
@@ -338,17 +358,16 @@ const checkFresh = (contact, resources) => {
       "Success/Failed": "Failed",
       "Failed Reason": "Location Not Found",
     };
-  }
-  else if (
-    contact["State"] && contact["State"] !== "" &&
+  } else if (
+    contact["State"] &&
+    contact["State"] !== "" &&
     !resources.state.includes(contact["State"])
   ) {
     return {
       "Success/Failed": "Failed",
       "Failed Reason": "State Not Found",
     };
-  }
-  else if (
+  } else if (
     contact["Project"] !== "" &&
     !resources.project.includes(contact["Project"])
   ) {
@@ -390,14 +409,12 @@ const checkInterested = (contact, resources) => {
       "Success/Failed": "Failed",
       "Failed Reason": "Interested Lead - Location Not Found",
     };
-  }
-  else if (contact["State"] && !resources.state.includes(contact["State"])) {
+  } else if (contact["State"] && !resources.state.includes(contact["State"])) {
     return {
       "Success/Failed": "Failed",
       "Failed Reason": "Interested Lead - State Not Found",
     };
-  }
-  else if (!resources.project.includes(contact["Project"])) {
+  } else if (!resources.project.includes(contact["Project"])) {
     return {
       "Success/Failed": "Failed",
       "Failed Reason": "Interested Lead - Project Not Found",
@@ -589,8 +606,8 @@ const validateCSVData = (contactsList, usersMap, resources, projects) => {
       contactsList[index] = { ...contact, ...resultData };
       return;
     } else {
-       const vlid=isValidMobile(contact["Customer Mobile No."])
-      if(vlid!==""){
+      const vlid = isValidMobile(contact["Customer Mobile No."]);
+      if (vlid !== "") {
         resultData = {
           "Success/Failed": "Failed",
           "Failed Reason": vlid,
@@ -599,7 +616,10 @@ const validateCSVData = (contactsList, usersMap, resources, projects) => {
         return;
       }
 
-      if(contact["Customer Mobile No."].length!==10 && (contact["Country Code"]==="+91" || contact["Country Code"]==="91")){
+      if (
+        contact["Customer Mobile No."].length !== 10 &&
+        (contact["Country Code"] === "+91" || contact["Country Code"] === "91")
+      ) {
         resultData = {
           "Success/Failed": "Failed",
           "Failed Reason": "Invalid mobile No. length",
@@ -625,8 +645,7 @@ const validateCSVData = (contactsList, usersMap, resources, projects) => {
         };
         contactsList[index] = { ...contact, ...resultData };
         return;
-      }
-      else{
+      } else {
         contactsList[index] = { ...contact, ...resultData };
       }
       // if (!resources.budget.includes(contact["Budget"])) {
@@ -667,8 +686,13 @@ const validateCSVData = (contactsList, usersMap, resources, projects) => {
 
 let csvProcessed = [];
 let csvProcessedFinal = [];
-const projectValidateCSVData = async (projectList, usersMap, resources, organization_id, created_by) => {
-
+const projectValidateCSVData = async (
+  projectList,
+  usersMap,
+  resources,
+  organization_id,
+  created_by
+) => {
   let duplicateProjectsData = [];
   let uniqueProjectsData = [];
   let uniqueProjData = [];
@@ -676,43 +700,65 @@ const projectValidateCSVData = async (projectList, usersMap, resources, organiza
   let projectsData = await projectsModel.find({ organization_id });
 
   if (projectsData) {
-    const oldDataPojectName = new Set(projectsData.map(({ project_name }) => project_name));
+    const oldDataPojectName = new Set(
+      projectsData.map(({ project_name }) => project_name)
+    );
 
     uniqueProjectsData = [
-      ...projectList.filter((item) => !oldDataPojectName.has(item["Project Name"]))
+      ...projectList.filter(
+        (item) => !oldDataPojectName.has(item["Project Name"])
+      ),
     ];
 
     uniqueProjectsData?.map((list) => {
-      return uniqueProjData.push({ ...list, "Failed Reason": "", "Success/Failed": "success"})
+      return uniqueProjData.push({
+        ...list,
+        "Failed Reason": "",
+        "Success/Failed": "success",
+      });
     });
 
-
     let duplicateData = [
-      ...projectList.filter((item) => oldDataPojectName.has(item["Project Name"]))
+      ...projectList.filter((item) =>
+        oldDataPojectName.has(item["Project Name"])
+      ),
     ];
     duplicateData?.map((list) => {
-      return duplicateProjectsData.push({ ...list, "Failed Reason": "Project Name  already exists", "Success/Failed": "failed" })
+      return duplicateProjectsData.push({
+        ...list,
+        "Failed Reason": "Project Name  already exists",
+        "Success/Failed": "failed",
+      });
     });
     csvProcessed = duplicateProjectsData.concat(uniqueProjData);
 
     csvProcessed?.map((list) => {
       if (!("Project Name" in list)) {
-        return csvProcessed.push({ ...list, "Failed Reason": "Header not available : Project Name", "Success/Failed": "failed" })
+        return csvProcessed.push({
+          ...list,
+          "Failed Reason": "Header not available : Project Name",
+          "Success/Failed": "failed",
+        });
       }
     });
-  }
-  else {
+  } else {
     projectList?.map((list) => {
-      return csvProcessed.push({ ...list, "Failed Reason": "", "Success/Failed": "success" })
+      return csvProcessed.push({
+        ...list,
+        "Failed Reason": "",
+        "Success/Failed": "success",
+      });
     });
     csvProcessed?.map((list) => {
       if (!("Project Name" in list)) {
-        return csvProcessed.push({ ...list, "Failed Reason": "Header not available : Project Name", "Success/Failed": "failed" })
+        return csvProcessed.push({
+          ...list,
+          "Failed Reason": "Header not available : Project Name",
+          "Success/Failed": "failed",
+        });
       }
     });
-
   }
-
 };
 
 const chunk = (arr, chunkSize) => {
@@ -725,10 +771,13 @@ const chunk = (arr, chunkSize) => {
   return R;
 };
 
-
 const checkContactNoMongo = async (organization_id, chunk, result) => {
   try {
-    let data = await leadModel.find({ contact_no: { $in: chunk }, organization_id: organization_id, transfer_status: false });
+    let data = await leadModel.find({
+      contact_no: { $in: chunk },
+      organization_id: organization_id,
+      transfer_status: false,
+    });
     if (data) {
       data.map((doc) => {
         result.push(doc.contact_no);
@@ -786,7 +835,7 @@ const createLeadsDataToInsert = async (
     contact_owner_email: contact["Lead Assignee Email"],
     feedback_time: "",
     state: contact["State"] ? contact["State"] : "",
-  }
+  };
 
   bulkLeads.push(leadData);
 
@@ -798,15 +847,12 @@ const createLeadsDataToInsert = async (
 
     contactResourceDoc = {
       leadId,
-      notes: [
-        noteData
-      ],
-      attachments: []
+      notes: [noteData],
+      attachments: [],
     };
 
     bulkNotes.push(contactResourceDoc);
   }
-
 };
 
 const createUploadRequest = async (requestData) => {
@@ -824,7 +870,7 @@ const createUploadRequest = async (requestData) => {
   } catch (err) {
     return {};
   }
-}
+};
 
 const updateUploadRequest = async (request_id, updateData) => {
   try {
@@ -838,24 +884,33 @@ const updateUploadRequest = async (request_id, updateData) => {
   } catch (error) {
     return {};
   }
-}
+};
 
+/**
+ * 📤 Upload Contacts
+ * Handles CSV file processing and importing contacts efficiently.
+ */
 dataUploadRequestController.UploadContacts = async (req, res) => {
   try {
-    const fileUrl = req.body.fileUrl ? req.body.fileUrl : "";
-    const request_id = req.body.request_id ? req.body.request_id : "";
-    const organization_id = req.body.organization_id ? req.body.organization_id : "";
-    const created_by = req.body.created_by ? req.body.created_by : "";
-    const uid = req.body.uid ? req.body.uid : "";
+    const { fileUrl, request_id, organization_id, created_by, uid } = req.body;
+
+    /** 🛑 Validate required fields */
     if (!fileUrl || !request_id || !organization_id || !created_by || !uid) {
+      logger.warn("⚠️ Missing required fields");
       return res.status(400).json({
         success: false,
         message: "Missing required parameters",
+        status: 400,
       });
     }
-    let fileName = `r-${request_id}.csv`;
+
+    logger.info(`📡 Processing contact upload for Request ID: ${request_id}`);
+
+    /** 🔄 Generate S3 file path */
+    const fileName = `r-${request_id}.csv`;
     const processedFileLocation = generateS3KeyName(request_id, fileName);
 
+    /** 🚀 Create upload request */
     const contactUploadRequest = {
       request_id,
       organization_id,
@@ -864,97 +919,80 @@ dataUploadRequestController.UploadContacts = async (req, res) => {
       type: "Contacts",
       created_by,
       uid,
-    }
+    };
+    await createUploadRequest(contactUploadRequest);
 
-    const dataUploadRequest = await createUploadRequest(contactUploadRequest);
     const contactsList = [];
-    const header = fields.map((feild) => {
-      return { id: feild, title: feild };
-    });
-    const csvWriter = createCsvWriter({
-      path: `${request_id}.csv`,
-      header,
-    });
-    let nameFeild = undefined;
-    // let validateCSVHeadersRan = false;
-    let areCSVHeadersValid = true;
     let csvHeaders;
-    const request = https.get(fileUrl, function (response) {
+    let areCSVHeadersValid = true;
+
+    /** 🔍 Fetch and process CSV */
+    https.get(fileUrl, (response) => {
       response
         .pipe(csv())
         .on("data", async (data) => {
           csvHeaders = Object.keys(data);
           areCSVHeadersValid = validateContactCSVHeaders(csvHeaders);
-          if (nameFeild === undefined) {
-            nameFeild = Object.keys(data)[0];
-          }
-          if (
-            nameFeild !== "Customer Name" &&
-            nameFeild.includes("Customer Name")
-          ) {
-            data["Customer Name"] = data[nameFeild];
-            delete data[nameFeild];
-          }
-          if (data["Country Code"] && (!data["Country Code"].startsWith("+"))) {
-            data["Country Code"] = "+" + data["Country Code"];
+          if (data["Country Code"] && !data["Country Code"].startsWith("+")) {
+            data["Country Code"] = `+${data["Country Code"]}`;
           }
           contactsList.push(data);
         })
         .on("end", async () => {
-          if (areCSVHeadersValid === false) {
+          /** 🛑 Validate CSV Headers */
+          if (!areCSVHeadersValid) {
             return res.status(400).json({
               success: false,
-              message: "Imported CSV is not in required format, Please use the template provided in Import Contacts Panel"
+              message: "CSV format invalid, please use the provided template",
+              status: 400,
             });
           }
+
           const usersMap = await getUserMapMongo(organization_id);
-          const resources = await getOrganizationResourcesMongo(organization_id);
+          const resources = await getOrganizationResourcesMongo(
+            organization_id
+          );
           const projects = await getProjects(organization_id);
           validateCSVData(contactsList, usersMap, resources, projects);
+
+          /** 🚀 Check for duplicate mobile numbers */
           const contact_map = {};
-
-          if (contactsList.length > 10000) {
-            return res.status(400).json({
-              success: false,
-              message: "Maximum of 10,000 records allowed to import at once",
-              error: "Maxium import limit breached",
-            });
-          }
-
-          let contact_nos = contactsList.map((contact, index) => {
-            if (contact["Failed Reason"] === "") {
-              contact_map[contact["Customer Mobile No."]] = index;
-              return contact["Customer Mobile No."];
-            }
-          });
-          contact_nos = contact_nos.filter((contact) => contact !== undefined);
+          let contact_nos = contactsList
+            .map((contact, index) => {
+              if (!contact["Failed Reason"]) {
+                contact_map[contact["Customer Mobile No."]] = index;
+                return contact["Customer Mobile No."];
+              }
+            })
+            .filter(Boolean);
 
           const chunks = chunk(contact_nos, 5000);
-
           const contactCheckResult = [];
-          for (let i = 0; i < chunks.length; i++) {
-            await checkContactNoMongo(organization_id, chunks[i], contactCheckResult);
+          for (const chunk of chunks) {
+            await checkContactNoMongo(
+              organization_id,
+              chunk,
+              contactCheckResult
+            );
           }
 
+          contactCheckResult.forEach((contact_no) => {
+            const index = contact_map[contact_no];
+            contactsList[index] = {
+              ...contactsList[index],
+              "Success/Failed": "Failed",
+              "Failed Reason": "Mobile No. Already Exists",
+            };
+          });
 
-          if (contactCheckResult.length !== 0) {
-            contactCheckResult.forEach((contact_no) => {
-              const index = contact_map[contact_no];
-              contactsList[index] = {
-                ...contactsList[index],
-                "Success/Failed": "Failed",
-                "Failed Reason": "Mobile No. Already Exists",
-              };
-            });
-          }
-          // const promises = [];
-          let count = 0;
-          let notifications = {};
-          let leadIds = {};
+          /** 🔄 Prepare bulk insertion */
           let bulkLeads = [];
           let bulkNotes = [];
+          let notifications = {};
+          let leadIds = {};
+
           contactsList.forEach((contact) => {
-            if (contact["Failed Reason"] === "") {
+            if (!contact["Failed Reason"]) {
               createLeadsDataToInsert(
                 contact,
                 organization_id,
@@ -964,85 +1002,91 @@ dataUploadRequestController.UploadContacts = async (req, res) => {
                 bulkLeads,
                 bulkNotes
               );
-
-              count += 1;
-
-              let uid = usersMap[contact["Lead Assignee Email"]].uid;
-              if (notifications[uid]) {
-                notifications[uid] += 1;
-              } else {
-                notifications[uid] = 1;
-              }
+              notifications[usersMap[contact["Lead Assignee Email"]].uid] =
+                (notifications[usersMap[contact["Lead Assignee Email"]].uid] ||
+                  0) + 1;
             }
           });
 
-          let leadsData = await leadModel.insertMany(bulkLeads);
-          let contactResourcesData = await contactResourcesMongoModel.insertMany(bulkNotes);
+          await leadModel.insertMany(bulkLeads);
+          await contactResourcesMongoModel.insertMany(bulkNotes);
 
-          // const fcmTokens = (
-          //   await admin
-          //     .firestore()
-          //     .collection("fcmTokens")
-          //     .doc(organization_id)
-          //     .get()
-          // ).data();
-          Object.keys(notifications).forEach(async (uid) => {
-            let user = await userModel.findOne({uid});
-            let userFcmToken = user?.fcm_token ? user?.fcm_token  : "";
-            await sendNotificationToSingleUser(userFcmToken,"New Leads",`${leadIds[uid].length} leads assigned`);
-            // let user = await userModel.findOne({uid});
-            // if (user && user["fcm_token"] && user["fcm_token"] !== "") {
-            //   admin.messaging().sendToDevice(
-            //     user["fcm_token"],
-            //     {
-            //       notification: {
-            //         title: "New Leads",
-            //         body: `${leadIds[uid].length} leads assigned`,
-            //         body: `leads assigned`,
-            //         sound: "default",
-            //       },
-            //     },
-            //     { contentAvailable: false, priority: "high" }
-            //   );
-            // }
+          /** 📩 Send notifications */
+          for (const uid of Object.keys(notifications)) {
+            const user = await userModel.findOne({ uid });
+            if (user?.fcm_token) {
+              await sendNotificationToSingleUser(
+                user.fcm_token,
+                "New Leads",
+                `${leadIds[uid]?.length || 0} leads assigned`
+              );
+            }
+          }
+
+          /** 📂 Upload processed CSV */
+          await createCsvWriter({
+            path: `${request_id}.csv`,
+            header: fields.map((field) => ({ id: field, title: field })),
+          }).writeRecords(contactsList);
+
+          const uploadedFileUrl = await uploadFileToS3(
+            request_id,
+            processedFileLocation
+          );
+          await updateUploadRequest(request_id, {
+            status: "Processed",
+            upload_count: bulkLeads.length,
+            response_url: uploadedFileUrl,
           });
-          await csvWriter.writeRecords(contactsList);
-          const fileUrl = await uploadFileToS3(request_id, processedFileLocation);
-          const updateDataForUploadRequest = { status: "Processed", upload_count: count, response_url: fileUrl };
-          const dataUploadRequest = await updateUploadRequest(request_id, updateDataForUploadRequest);
-          await fs.unlink(`${request_id}.csv`, async () => {
-          });
+
+          await fs.unlink(`${request_id}.csv`, async () => {});
+
+          logger.info(
+            `✅ Contact upload completed for Request ID: ${request_id}`
+          );
           return res.status(201).json({
             success: true,
-            message: "Data imported successfully"
+            message: "Data imported successfully",
+            status: 201,
           });
         });
     });
-  } catch (err) {
-    return res.status(400).json({
+  } catch (error) {
+    logger.error(`❌ Error processing contact upload: ${error.message}`);
+    return res.status(500).json({
       success: false,
-      message: "An error occured, Please try again",
-      error: err.message,
+      message: "An error occurred, please try again",
+      status: 500,
+      error: error.message,
     });
   }
 };
 
+/**
+ * 📤 Upload Projects
+ * Handles CSV file processing and importing projects efficiently.
+ */
 dataUploadRequestController.UploadProjects = async (req, res) => {
   try {
-    const fileUrl = req.body.fileUrl ? req.body.fileUrl : "";
-    const request_id = req.body.request_id ? req.body.request_id : "";
-    const organization_id = req.body.organization_id ? req.body.organization_id : "";
-    const created_by = req.body.created_by ? req.body.created_by : "";
-    const uid = req.body.uid ? req.body.uid : "";
+    const { fileUrl, request_id, organization_id, created_by, uid } = req.body;
+
+    /** 🛑 Validate required fields */
     if (!fileUrl || !request_id || !organization_id || !created_by || !uid) {
+      logger.warn("⚠️ Missing required fields");
       return res.status(400).json({
         success: false,
         message: "Missing required parameters",
+        status: 400,
       });
     }
-    let fileName = `r-${request_id}.csv`;
+
+    logger.info(`📡 Processing project upload for Request ID: ${request_id}`);
+
+    /** 🔄 Generate S3 file path */
+    const fileName = `r-${request_id}.csv`;
     const processedFileLocation = generateS3KeyName(request_id, fileName);
 
+    /** 🚀 Create upload request */
     const projectsUploadRequest = {
       request_id,
       organization_id,
@@ -1051,82 +1095,46 @@ dataUploadRequestController.UploadProjects = async (req, res) => {
       type: "Projects",
       created_by,
       uid,
-    }
-
-    const dataUploadRequest = await createUploadRequest(projectsUploadRequest);
+    };
+    await createUploadRequest(projectsUploadRequest);
 
     const projectList = [];
-    const header = projectField.map((feild) => {
-      return { id: feild, title: feild };
-    });
-    const csvWriter = createCsvWriter({
-      path: `${request_id}.csv`,
-      header,
-    });
-    let nameFeild = undefined;
+    let csvHeaders;
     let areCSVHeadersValid = true;
-    const request = https.get(fileUrl, function (response) {
+
+    /** 🔍 Fetch and process CSV */
+    https.get(fileUrl, (response) => {
       response
         .pipe(csv())
         .on("data", async (data) => {
           csvHeaders = Object.keys(data);
           areCSVHeadersValid = validateProjectCSVHeaders(csvHeaders);
-          if (nameFeild === undefined) {
-            nameFeild = Object.keys(data)[0];
-          }
-          if (
-            nameFeild !== "Project Name" &&
-            nameFeild.includes("Project Name")
-          ) {
-            data["Project Name"] = data[nameFeild];
-            delete data[nameFeild];
-          }
-          // if (!data["Country Code"].startsWith("+")) {
-          //   data["Country Code"] = "+" + data["Country Code"];
-          // }
           projectList.push(data);
         })
         .on("end", async () => {
-          if (areCSVHeadersValid === false) {
+          /** 🛑 Validate CSV Headers */
+          if (!areCSVHeadersValid) {
             return res.status(400).json({
               success: false,
-              message: "Imported CSV is not in required format, Please use the template provided in Import Projects Panel"
+              message: "CSV format invalid, please use the provided template",
+              status: 400,
             });
           }
-          const projectPromises = [];
+
+          /** 🚀 Validate and process project data */
           const usersMap = await getUserMapMongo(organization_id);
-          const resources = await getOrganizationResourcesMongo(organization_id);
-          const validatePromise = projectValidateCSVData(projectList, usersMap, resources, organization_id, created_by);
-          projectPromises.push(validatePromise);
-          await Promise.all(projectPromises);
-          const project_map = {};
-          let bulkProjects = [];
+          const resources = await getOrganizationResourcesMongo(
+            organization_id
+          );
+          await projectValidateCSVData(
+            projectList,
+            usersMap,
+            resources,
+            organization_id,
+            created_by
+          );
 
-          if (projectList.length > 10000) {
-            return res.status(400).json({
-              success: false,
-              message: "Maximum of 10,000 records allowed to import at once",
-              error: "Maxium import limit breached",
-            });
-          }
-
-          let project_nos = projectList.map((project, index) => {
-
-            if (project["Failed Reason"] === "") {
-              project_map[project["Project Name"]] = index;
-              return project["Project Name"];
-            }
-            else {
-              return project["Project Name"];
-            }
-          });
-          project_nos = project_nos.filter((project) => project !== undefined);
-
-          const chunks = chunk(project_nos, 10);
-          const promises = [];
-          let count = 0;
-          let notifications = {};
-          let leadIds = {};
+          const bulkProjects = [];
           await createProjectDataToInsert(
             projectList,
             organization_id,
@@ -1134,64 +1142,106 @@ dataUploadRequestController.UploadProjects = async (req, res) => {
             bulkProjects
           );
 
-          // console
-          let projectsData = await projectsModel.insertMany(bulkProjects);
+          /** 🔄 Perform bulk insertion */
+          await projectsModel.insertMany(bulkProjects);
 
-          count = bulkProjects.length;
+          /** 📩 Send notifications */
+          if (bulkProjects.length > 0 && bulkProjects[0]?.organization_id) {
+            await sendNotificationForNewProject(
+              bulkProjects[0].organization_id
+            );
+          }
 
-         if(bulkProjects.length >0 && bulkProjects[0].organization_id){
-          await sendNotificationForNewProject(bulkProjects[0].organization_id);
-         }
-          
-          
-          await csvWriter.writeRecords(csvProcessed);
-          const fileUrl = await uploadFileToS3(request_id, processedFileLocation);
-          const updateDataForUploadRequest = { status: "Processed", upload_count: count, response_url: fileUrl };
-          const dataUploadRequest = await updateUploadRequest(request_id, updateDataForUploadRequest);
-          await fs.unlink(`${request_id}.csv`, async () => {
+          /** 📂 Upload processed CSV */
+          await createCsvWriter({
+            path: `${request_id}.csv`,
+            header: projectField.map((field) => ({ id: field, title: field })),
+          }).writeRecords(projectList);
+
+          const uploadedFileUrl = await uploadFileToS3(
+            request_id,
+            processedFileLocation
+          );
+          await updateUploadRequest(request_id, {
+            status: "Processed",
+            upload_count: bulkProjects.length,
+            response_url: uploadedFileUrl,
           });
+
+          await fs.unlink(`${request_id}.csv`, async () => {});
+
+          logger.info(
+            `✅ Project upload completed for Request ID: ${request_id}`
+          );
           return res.status(201).json({
             success: true,
-            message: "Data imported successfully"
+            message: "Data imported successfully",
+            status: 201,
           });
         });
     });
-  } catch (err) {
-    return res.status(400).json({
+  } catch (error) {
+    logger.error(`❌ Error processing project upload: ${error.message}`);
+    return res.status(500).json({
       success: false,
-      message: "An error occured, Please try again",
-      error: err.message,
+      message: "An error occurred, please try again",
+      status: 500,
+      error: error.message,
     });
   }
 };
 
-// // Get all API tokens - GET request
+/**
+ * 📂 Fetch All Data Upload Requests
+ * Retrieves all uploaded data requests with structured validation and logging.
+ */
 dataUploadRequestController.FetchAll = async (req, res) => {
   try {
-    let sort = { created_at: -1 }
-    const { organization_id,uid, type
-    } = req.query;
+    const { organization_id, uid, type } = req.query;
+
+    /** 🛑 Validate required fields */
     if (!organization_id || !uid || !type) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required parameters",
-        error: "Missing required parameters",
-      });
+      logger.warn("⚠️ Missing required fields");
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Missing required parameters",
+          status: 400,
+        });
     }
 
-    const dataUploadRequests = await dataUploadRequestModel.find({ organization_id: organization_id,uid: uid, type: type }, { __v: 0 }).lean()
-      .sort(sort)
-    return res.status(200).json({
-      success: true,
-      message: "Data fetched successfully",
-      data: dataUploadRequests
-    });
+    logger.info(
+      `📡 Fetching data upload requests for Organization ID: ${organization_id}, UID: ${uid}, Type: ${type}`
+    );
+
+    /** 🚀 Fetch sorted data upload requests */
+    const dataUploadRequests = await dataUploadRequestModel
+      .find({ organization_id, uid, type }, { __v: 0 })
+      .lean()
+      .sort({ created_at: -1 });
+
+    logger.info(
+      `✅ Successfully retrieved ${dataUploadRequests.length} data upload requests`
+    );
+    return res
+      .status(200)
+      .json({
+        success: true,
+        message: "Data fetched successfully",
+        status: 200,
+        data: dataUploadRequests,
+      });
   } catch (error) {
-    return res.status(400).json({
-      success: false,
-      message: "An error occured, Please try again",
-      error: error.message,
-    });
+    logger.error(`❌ Error fetching data upload requests: ${error.message}`);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "An error occurred, please try again",
+        status: 500,
+        error: error.message,
+      });
   }
 };
 

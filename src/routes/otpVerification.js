@@ -1,143 +1,54 @@
 const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
 const otpVerificationController = require("../controllers/otpVerificationController");
-var router = express.Router();
-//router.get('/', userController.createUser);
 
-const { sendOtpVerfication,sendOtpVerficationNew, verifyOtp, resendOtp } =
-otpVerificationController;
+const router = express.Router();
 
-/**
- * @openapi
- * /otpVerification/sendOtp:
- *   post:
- *     summary: Send OTP Verification
- *     description: Send an OTP verification code to the user's registered contact information.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               contactInfo:
- *                 type: string
- *                 description: The user's contact information to send the OTP to.
- *             example:
- *               contactInfo: "user@example.com"
- *     responses:
- *       200:
- *         description: OTP sent successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - otpVerification
- */
-router.post("/sendOtp", sendOtpVerfication);
-
-router.post("/sendOtpNew", sendOtpVerficationNew);
+// Destructure controller methods for cleaner usage
+const { sendOtpVerification, sendOtpVerificationNew, verifyOtp, resendOtp } =
+  otpVerificationController;
 
 /**
- * @openapi
- * /otpVerification/verifyOtp:
- *   post:
- *     summary: Verify OTP
- *     description: Verify the provided OTP code for user authentication.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               otpCode:
- *                 type: string
- *                 description: The OTP code for verification.
- *             example:
- *               otpCode: "123456"
- *     responses:
- *       200:
- *         description: OTP verification successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - otpVerification
+ * 🛠 Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.post("/verifyOtp", verifyOtp);
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
 /**
- * @openapi
- * /otpVerification/resendOtp:
- *   post:
- *     summary: Resend OTP
- *     description: Resend the OTP verification code to the user's registered contact information.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               contactInfo:
- *                 type: string
- *                 description: The user's contact information to resend the OTP to.
- *             example:
- *               contactInfo: "user@example.com"
- *     responses:
- *       200:
- *         description: OTP resent successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - otpVerification
+ * 🔒 Send OTP Verification
+ * Initiates OTP verification process.
  */
-router.post("/resendOtp", resendOtp);
+router.post("/sendOtp", asyncHandler(sendOtpVerification));
+
+/**
+ * 🔒 Send New OTP Verification
+ * Handles a new variant of OTP verification.
+ */
+router.post("/sendOtpNew", asyncHandler(sendOtpVerificationNew));
+
+/**
+ * ✅ Verify OTP
+ * Verifies the received OTP.
+ */
+router.post("/verifyOtp", asyncHandler(verifyOtp));
+
+/**
+ * 🔄 Resend OTP
+ * Resends OTP if the previous one expired or was lost.
+ */
+router.post("/resendOtp", asyncHandler(resendOtp));
 
 module.exports = router;

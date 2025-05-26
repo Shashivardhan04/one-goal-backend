@@ -8,6 +8,7 @@ const {
   PutObjectCommand,
   DeleteObjectCommand,
 } = require("@aws-sdk/client-s3");
+const logger = require("../services/logger");
 
 const s3Controller = {};
 
@@ -45,9 +46,9 @@ const sanitizeFileName = (fileName) => {
 };
 
 const getFileExtension = (fileName) => {
-  const parts= fileName.split(".");
+  const parts = fileName.split(".");
   if (parts.length > 2) {
-    return ''; // If there are multiple periods, return an empty string to indicate an invalid extension
+    return ""; // If there are multiple periods, return an empty string to indicate an invalid extension
   }
   return parts.pop().toLowerCase();
 };
@@ -57,7 +58,11 @@ uploadFileToS3 = (req, res) => {
     // console.log("req.file",req.file,req.body);
     try {
       if (err) {
-        return res.status(400).json({ success: false, error: err.message, message: "An error occured, please try again" });
+        return res.status(400).json({
+          success: false,
+          error: err.message,
+          message: "An error occured, please try again",
+        });
       }
 
       const Id = req?.body?.Id ? req.body.Id : "";
@@ -88,13 +93,16 @@ uploadFileToS3 = (req, res) => {
         "mov",
         "hevc",
         "heif",
-        "h.264"
+        "h.264",
       ]; // Allowed file extensions
       const maxFileSize = 100 * 1024 * 1024; // 100 MB
 
       // File extension check
       const fileExtension = getFileExtension(validFileName);
-      if (!fileExtension || !allowedExtensions.includes(fileExtension.toLowerCase())) {
+      if (
+        !fileExtension ||
+        !allowedExtensions.includes(fileExtension.toLowerCase())
+      ) {
         return res
           .status(400)
           .json({ success: false, message: "Invalid file extension" });
@@ -102,12 +110,10 @@ uploadFileToS3 = (req, res) => {
 
       // File size check
       if (fileSize > maxFileSize) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "File size is too large, It should be less than 100 MB",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "File size is too large, It should be less than 100 MB",
+        });
       }
 
       // const fileFormat = req.file.mimetype.split('/')[1];
@@ -142,43 +148,47 @@ uploadFileToS3 = (req, res) => {
   });
 };
 
+/**
+ * 📤 Upload File to S3
+ * Handles file upload requests with error logging.
+ */
 s3Controller.DataUpload = async (req, res) => {
   try {
-    uploadFileToS3(req, res);
+    logger.info(`📡 Uploading file to S3`);
+
+    await uploadFileToS3(req, res);
+
+    logger.info(`✅ File uploaded successfully`);
   } catch (error) {
-    console.error("Data upload error:", error);
-    return res
-      .status(400)
-      .json({ success: false, message: "Failed to upload file", error: error });
+    logger.error(`❌ Data upload error: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to upload file",
+      status: 500,
+      error: error.message,
+    });
   }
 };
 
-s3Controller.DeleteS3File = async (req, res) => {
+/**
+ * 📤 Upload File to S3
+ * Handles file upload requests with error logging.
+ */
+s3Controller.DataUpload = async (req, res) => {
   try {
-    const key = req.body.url; // Assuming the key of the file to be deleted is sent in the request body
-    let key1 = key.replace(/^.*\/\/[^/]+/, "");
-    if (key1.startsWith("/")) {
-      key1 = key1.substring(1);
-    }
+    logger.info(`📡 Uploading file to S3`);
 
-    // Construct parameters for deleting the object
-    const deleteParams = {
-      Bucket: bucketName,
-      Key: key1,
-    };
-    // Create DeleteObjectCommand to delete the object from S3
-    const deleteCommand = new DeleteObjectCommand(deleteParams);
+    await uploadFileToS3(req, res);
 
-    // Send command to S3 client to delete the object
-    const deleteResult = await s3Client.send(deleteCommand);
-
-    // Return success response if deletion is successful
-    return res.json({ success: true, message: "File deleted successfully" });
+    logger.info(`✅ File uploaded successfully`);
   } catch (error) {
-    console.error("File deletion error:", error);
-    return res
-      .status(400)
-      .json({ success: false, error: "Failed to delete file" });
+    logger.error(`❌ Data upload error: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to upload file",
+      status: 500,
+      error: error.message,
+    });
   }
 };
 

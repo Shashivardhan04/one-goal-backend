@@ -1,134 +1,41 @@
-const express = require('express');
-const automatedScoreController = require('../controllers/automatedScoreController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
+const automatedScoreController = require("../controllers/automatedScoreController");
 
-const {createWeights,calculation} = automatedScoreController;
+const router = express.Router();
 
-
-/**
- * @openapi
- * /automatedScore/Create:
- *   post:
- *     summary: Create or update weights
- *     description: Create or update weights for automated scoring.
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               organization_id:
- *                 type: string
- *               weights:
- *                 type: object
- *                 properties:
- *                   totalWonWeights:
- *                     type: number
- *                   totalMissedWeights:
- *                     type: number
- *                   totalMeetingsWeights:
- *                     type: number
- *                   totalInterestedWeights:
- *                     type: number
- *                 required:
- *                   - totalWonWeights
- *                   - totalMissedWeights
- *                   - totalMeetingsWeights
- *                   - totalInterestedWeights
- *           example:
- *             organization_id: "your-organization-id"
- *             weights:
- *               totalWonWeights: 1
- *               totalMissedWeights: 1
- *               totalMeetingsWeights: 1
- *               totalInterestedWeights: 1
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *           example:
- *             success: true
- *             data: { /* your response data here * / }
- *     tags:
- *       - Automated Score
- */
-router.post('/Create', createWeights);
+// Destructure controller methods for cleaner usage
+const { createWeights, calculation } = automatedScoreController;
 
 /**
- * @openapi
- * /automatedScore/calculation:
- *   post:
- *     summary: Calculate automated score
- *     description: Calculate the automated score based on specific criteria.
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               organization_id:
- *                 type: string
- *               uid:
- *                 type: string
- *           example:
- *             organization_id: "your-organization-id"
- *             uid: "your-user-id"
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     score:
- *                       type: number
- *           example:
- *             success: true
- *             data: { score: 85 }
- *       403:
- *         description: Forbidden - Token not found or invalid
- *     tags:
- *       - Automated Score
- *     example:
- *       summary: Example Request with Token
- *       description: Example request with a valid token included in the header.
- *       value:
- *         organization_id: "your-organization-id"
- *         uid: "your-user-id"
- *       headers:
- *         x-access-token: "your-auth-token"
+ * 🛠 Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.post('/calculation',calculation);
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
+/**
+ * ⚖️ Create Weights
+ * Stores weighted parameters for automated scoring logic.
+ */
+router.post("/Create", asyncHandler(createWeights));
+
+/**
+ * 🔢 Perform Calculation
+ * Computes scores using predefined weight parameters.
+ */
+router.post("/calculation", asyncHandler(calculation));
 
 module.exports = router;

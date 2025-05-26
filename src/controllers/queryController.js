@@ -1,53 +1,64 @@
-const Query = require('../models/querySchema');
+const Query = require("../models/querySchema");
+const logger = require("../services/logger");
 
 const queryController = {};
 
+/**
+ * 🔍 Get Queries
+ * Retrieves queries for a given user with structured validation and logging.
+ */
 queryController.getQueries = async (req, res) => {
-  const { user_id } = req.body;
   try {
-    const queries = await Query.find({ user_id });
-    if (!queries) {
-      throw new Error('Please enter valid Id, No Document found');
-    } else {
-      return res.status(200).json({
-        isValidExecution: true,
-        query: queries,
-      });
+    const { user_id } = req.body;
+
+    /** 🛑 Validate required field */
+    if (!user_id) {
+      logger.warn("⚠️ Missing required user ID for fetching queries");
+      return res
+        .status(400)
+        .json({ success: false, message: "User ID is required", status: 400 });
     }
+
+    logger.info(`📡 Fetching queries for User ID: ${user_id}`);
+
+    /** 🚀 Execute query */
+    const queries = await QueryModel.find({ user_id })
+      .sort({ created_at: -1 })
+      .lean();
+
+    /** 🛑 Handle case where no queries exist */
+    if (!queries.length) {
+      logger.warn(`⚠️ No queries found for User ID: ${user_id}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "No queries found", status: 404 });
+    }
+
+    logger.info(`✅ Queries retrieved successfully for User ID: ${user_id}`);
+    return res.status(200).json({
+      success: true,
+      message: "Queries retrieved successfully",
+      status: 200,
+      data: queries,
+    });
   } catch (error) {
-    return res.status(400).json({
-      isValidExecution: false,
+    logger.error(`❌ Error fetching queries: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred, please try again",
       error: error.message,
+      status: 500,
     });
   }
 };
 
+/**
+ * ➕ Add Query
+ * Stores a new query in the database with validation and logging.
+ */
 queryController.addQuery = async (req, res) => {
-  const {
-    mobile_no,
-    organization_name,
-    customer_name,
-    customer_email_id,
-    type_of_query,
-    attachment,
-    description,
-    user_id,
-  } = req.body;
-
-  let queryObj;
-
-  if (
-    mobile_no &&
-    organization_name &&
-    customer_name &&
-    customer_email_id &&
-    type_of_query &&
-    attachment &&
-    description &&
-    user_id
-  ) {
-    queryObj = new Query({
-      user_id,
+  try {
+    const {
       mobile_no,
       organization_name,
       customer_name,
@@ -55,34 +66,62 @@ queryController.addQuery = async (req, res) => {
       type_of_query,
       attachment,
       description,
-      ticket_no: 0,
+      user_id,
+    } = req.body;
+
+    /** 🛑 Validate required fields */
+    if (
+      !mobile_no ||
+      !organization_name ||
+      !customer_name ||
+      !customer_email_id ||
+      !type_of_query ||
+      !description ||
+      !user_id
+    ) {
+      logger.warn("⚠️ Missing required fields for query creation");
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be provided",
+        status: 400,
+      });
+    }
+
+    logger.info(`📡 Creating new query for User ID: ${user_id}`);
+
+    /** 🚀 Count existing queries to assign ticket number */
+    const ticketCount = await QueryModel.countDocuments();
+
+    /** 🔄 Create query object */
+    const queryObj = new QueryModel({
+      user_id,
+      mobile_no,
+      organization_name,
+      customer_name,
+      customer_email_id,
+      type_of_query,
+      attachment: attachment || "", // Ensure optional attachments don’t break processing
+      description,
+      ticket_no: ticketCount + 1, // Assign sequential ticket number
     });
-  } else {
-    return res.json({ message: 'All Fields are required' });
-  }
 
-  try {
-    let size;
-    await Query.countDocuments(async (err, count) => {
-      if (err) {
-        console.log(err);
-        res.send({ err });
-      } else {
-        size = count;
-        queryObj.ticket_no = size + 1;
-        const savedObj = await queryObj.save();
-        if (!savedObj) throw new Error('can not save object into db');
+    /** 💾 Save query */
+    const savedQuery = await queryObj.save();
 
-        return res.json({
-          isValidExecution: true,
-          query: savedObj,
-        });
-      }
+    logger.info(`✅ Query created successfully for User ID: ${user_id}`);
+    return res.status(201).json({
+      success: true,
+      message: "Query created successfully",
+      status: 201,
+      data: savedQuery,
     });
   } catch (error) {
-    return res.json({
-      isValidExecution: false,
+    logger.error(`❌ Error creating query: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      message: "An error occurred, please try again",
       error: error.message,
+      status: 500,
     });
   }
 };

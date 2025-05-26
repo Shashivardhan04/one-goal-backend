@@ -1,298 +1,78 @@
 const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
 const userTrackingController = require("../controllers/userTrackingController");
-var router = express.Router();
-//router.get('/', userController.createUser);
 
-const { getTrackingForDate, updateTrackingForDate,getUsersListForTracking,updateUserTrackingStatus,insertTrackingData,updateLiveTrackingStatus } =
-  userTrackingController;
+const router = express.Router();
 
-/**
- * @openapi
- * /userTracking/get:
- *   post:
- *     summary: Get Tracking for Date
- *     description: Retrieve tracking information for a specific date based on criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               date:
- *                 type: string
- *                 description: The date for which tracking information is requested.
- *             example:
- *               date: "your-date"
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *           example:
- *             success: true
- *             data: { /* your response data here * / }
- *     tags:
- *       - userTracking
- */
-router.post("/get", getTrackingForDate);
+// Destructure controller methods for cleaner usage
+const {
+  getTrackingForDate,
+  updateTrackingForDate,
+  getUsersListForTracking,
+  updateUserTrackingStatus,
+  insertTrackingData,
+  updateLiveTrackingStatus,
+} = userTrackingController;
 
 /**
- * @openapi
- * /userTracking/update:
- *   post:
- *     summary: Update Tracking for Date
- *     description: Update tracking information for a specific date with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               date:
- *                 type: string
- *                 description: The date for which tracking information is updated.
- *               updatedTrackingData:
- *                 type: object
- *                 description: Data for updating tracking information.
- *             example:
- *               date: "your-date"
- *               updatedTrackingData: { /* example updated tracking data * / }
- *     responses:
- *       200:
- *         description: Tracking updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - userTracking
+ * 🛠 Utility function to handle async routes gracefully.
+ * Ensures proper error handling and prevents repetitive try-catch blocks.
  */
-router.post("/update", updateTrackingForDate);
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
 /**
- * @openapi
- * /userTracking/getUsersList:
- *   post:
- *     summary: Get Users List for Tracking
- *     description: Retrieve a list of users for tracking purposes based on specific criteria.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               criteria:
- *                 type: string
- *                 description: The criteria for user selection.
- *             example:
- *               criteria: "your-criteria"
- *     responses:
- *       200:
- *         description: Successful response
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: array
- *                   items:
- *                     type: object
- *           example:
- *             success: true
- *             data: [{ /* user data here * / }]
- *     tags:
- *       - userTracking
+ * 🔍 Get Tracking Data for a Specific Date
+ * Retrieves user tracking information for a given date.
  */
-router.post("/getUsersList", getUsersListForTracking);
+router.post("/get", asyncHandler(getTrackingForDate));
 
 /**
- * @openapi
- * /userTracking/updateUserTrackingStatus:
- *   post:
- *     summary: Update User Tracking Status
- *     description: Update the tracking status of a user with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 description: The ID of the user to update tracking status.
- *               newStatus:
- *                 type: string
- *                 description: The new tracking status for the user.
- *             example:
- *               userId: "user-id"
- *               newStatus: "new-tracking-status"
- *     responses:
- *       200:
- *         description: User tracking status updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - userTracking
+ * 🔄 Update Tracking Data for a Specific Date
+ * Modifies existing tracking records for a given date.
  */
-router.post("/updateUserTrackingStatus",updateUserTrackingStatus);
+router.post("/update", asyncHandler(updateTrackingForDate));
 
 /**
- * @openapi
- * /userTracking/insertTrackingData:
- *   post:
- *     summary: Insert Tracking Data
- *     description: Insert tracking data for a specific user with the provided information.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 description: The ID of the user for tracking.
- *               trackingData:
- *                 type: object
- *                 description: Tracking data to insert.
- *             example:
- *               userId: "user-id"
- *               trackingData: { /* tracking data here * / }
- *     responses:
- *       201:
- *         description: Tracking data inserted successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - userTracking
+ * 📊 Get Users List for Tracking
+ * Fetches the list of users that require tracking.
  */
-router.post("/insertTrackingData",insertTrackingData);
+router.post("/getUsersList", asyncHandler(getUsersListForTracking));
 
 /**
- * @openapi
- * /userTracking/updateLiveTrackingStatus:
- *   post:
- *     summary: Update Live Tracking Status
- *     description: Update the live tracking status of a user with the provided data.
- *     security:
- *       - bearerAuth: []  # Reference the security scheme defined in app.js
- *     parameters:
- *       - in: header
- *         name: x-access-token
- *         required: true
- *         description: The authentication token.
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               userId:
- *                 type: string
- *                 description: The ID of the user to update live tracking status.
- *               newStatus:
- *                 type: string
- *                 description: The new live tracking status for the user.
- *             example:
- *               userId: "user-id"
- *               newStatus: "new-live-tracking-status"
- *     responses:
- *       200:
- *         description: Live tracking status updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *     tags:
- *       - userTracking
+ * ✅ Update User Tracking Status
+ * Updates the tracking status of a specific user.
  */
-router.post('/updateLiveTrackingStatus',updateLiveTrackingStatus);
+router.post(
+  "/updateUserTrackingStatus",
+  asyncHandler(updateUserTrackingStatus)
+);
 
+/**
+ * ➕ Insert Tracking Data
+ * Adds new tracking data entries to the system.
+ */
+router.post("/insertTrackingData", asyncHandler(insertTrackingData));
+
+/**
+ * 🔄 Update Live Tracking Status
+ * Modifies live tracking status for real-time updates.
+ */
+router.post(
+  "/updateLiveTrackingStatus",
+  asyncHandler(updateLiveTrackingStatus)
+);
 
 module.exports = router;
