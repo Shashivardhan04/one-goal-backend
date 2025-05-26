@@ -1,182 +1,216 @@
 const leadModel = require("../models/leadsSchema");
 const admin = require("../../firebaseAdmin.js");
-const projectResoucesModel = require('../models/projectResourcesSchema');
-const organResourcesModel = require('../models/organizationResourcesSchema'); 
+const projectResoucesModel = require("../models/projectResourcesSchema");
+const organResourcesModel = require("../models/organizationResourcesSchema");
 const userModel = require("../models/userSchema");
 const moment = require("moment");
-const projectsModel = require('../models/projectsSchema.js');
+const projectsModel = require("../models/projectsSchema.js");
+const logger = require("../services/logger");
 
-module.exports = {
+const templateController = {};
 
-  createMessageTemplate: async (req,res) => {
-    
-      try {
-                const {leadId,project_id,template_id} = req.body;
-                let projectsObj;
+/**
+ * 📝 Create Message Template
+ * Generates a message template with dynamic data insertion based on lead, project, and organization details.
+ */
+templateController.createMessageTemplate = async (req, res) => {
+  try {
+    const { leadId, project_id, template_id } = req.body;
 
-                const formatDateTime = (dateTimeString) => {
-                  if (dateTimeString) {
-                    const options = { year: 'numeric', month: 'short', day: 'numeric' };
-                    
-                    // Parse input date-time string using moment.js and convert to IST
-                    const date = moment.utc(dateTimeString).utcOffset('+05:30');
-                    
-                    const formattedDate = date.format('ll'); // Using moment.js for formatting date
-                    const formattedTime = date.format('hh:mm A'); // Using moment.js for formatting time
-                
-                    return `${formattedDate} at ${formattedTime}`;
-                  } else {
-                    return "";
-                  }
-                };
+    /** 🛑 Validate required fields */
+    if (!leadId || !template_id) {
+      logger.warn("⚠️ Missing required fields for message template creation");
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Some fields are missing",
+          status: 400,
+        });
+    }
 
-        if (!leadId || !template_id) {
-            return res.status(400).json({
-              success:false,
-              error:"Some Fields are missing"
-            });
-        } 
-        // else if (template_name = "" || (template_name = null)) {
-        //     return res.send("template is not define");
-        // }
-        // finding lead from lead id 
-        const lead = await leadModel.findOne({ Id: leadId }).lean();
+    logger.info(`📡 Creating message template for Lead ID: ${leadId}`);
 
-        if (!lead) {
-          return res.status(400).json({
-            success:false,
-            error:"lead data not found"
-          });
-          }
-    
-       const project= await projectResoucesModel.findOne({project_id:project_id}).lean();
+    /** 📅 Utility function to format date-time */
+    const formatDateTime = (dateTimeString) => {
+      if (!dateTimeString) return "";
+      const date = moment.utc(dateTimeString).utcOffset("+05:30");
+      return `${date.format("ll")} at ${date.format("hh:mm A")}`;
+    };
 
-      //  if (!project) {
-      //   return res.status(400).json({
-      //     success:false,
-      //     error:"project not found"
-      //   });
-      // }
-       // finding organization resource
+    /** 🔍 Fetch lead details */
+    const lead = await leadModel.findOne({ Id: leadId }).lean();
+    if (!lead) {
+      logger.warn(`⚠️ Lead data not found for Lead ID: ${leadId}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "Lead data not found", status: 404 });
+    }
 
-       const organization= await organResourcesModel.findOne({organization_id:lead.organization_id,resource_type:"custom_templates"});
+    /** 🔍 Fetch project details */
+    const project = await projectResoucesModel.findOne({ project_id }).lean();
 
-      //   if(!organization){
-      //         return res.status(400).json({
-      //           success:false,
-      //           error:"organization not found"
-      //         });
-      // }
-      
-      const userData = await userModel.findOne({user_email:lead.contact_owner_email}).lean();
-      const projectsData = await projectsModel.find({ organization_id: lead.organization_id }).lean();
-      // console.log("projects",projectsData);
-      projectsData.map(item => {
-        if(item.project_id == project_id){
-          projectsObj = item;
-        }
-      })
-
-      let map={
-        "Customer Name":"customer_name",
-        "Project Name":"project_name",
-        "Follow Up Time":"next_follow_up_date_time",
-        "Project Map Link":"project_map_url",
-        "Lead Owner Email": "contact_owner_email",
-        "Lead Number": "lead_number",
-        "Project Details": "project_description",
-        "Lead Owner Name": "user_name",
-        "Lead Owner Number": "user_number",
-        "Project Address":"address",
-      }
-       
-      let custom_template_array=organization.custom_templates;
-
-      let template=custom_template_array.find((obj)=>{
-               return obj._id==template_id;
-      })
-
-      let template_data=template.template_data;
-      let leadDataObj = {
-        ...lead,
-        lead_number: lead.contact_no
-      }
-      let userDataObj = {};
-      if(userData){
-        userDataObj = {
-          ...userData,
-          user_name:`${userData.user_first_name} ${userData.user_last_name}`,
-          user_number: userData.contact_no
-        }
-      }
-      let obj={...leadDataObj,...project,...userDataObj,...projectsObj,next_follow_up_date_time:formatDateTime(lead.next_follow_up_date_time)};
-
-      const replacedText = template_data.replace(/\{\{([^}]+)\}\}/g, (match, key) => {
-        const replacement =obj[map[key]] ? obj[map[key]] : "Not Mentioned"; // Trim the key to remove potential spaces
-        return replacement !== undefined ? replacement : match;
+    /** 🔍 Fetch organization resources */
+    const organization = await organResourcesModel.findOne({
+      organization_id: lead.organization_id,
+      resource_type: "custom_templates",
     });
 
-//       let resulted_array=[];
-// custom_template_array.forEach((val)=>{
-//          const replacedText=val.template_data.replace(/\{\{([^}]+)\}\}/g,(match,key)=>{
-//               const replacement = obj[key];
-//   return replacement !== undefined ? replacement : match;
-//          });
-         
-//          resulted_array.push(replacedText);
-// })
-// const replacedText = template_data.replace(/\{\{([^}]+)\}\}/g, (match, content) => {
-//   return content; // Extracted content without the curly braces
-// });
-   return  res.status(200).json({
-        success:true,
-        data:replacedText
-        
-      })
- } catch (error) {
-          return res.status(400).json({
-         status:false,
-           error:error.message
-          })
-        }
-    },
-    fetchTemplates: async (req,res) => {
-      try {
-        const {organization_id} = req.body;
-        const extractFields = (arr) => {
-          return arr.map(item => {
-              return {
-                  label: item.template_name,
-                  value: item._id
-              };
-          });
-      }
-        if (!organization_id) {
-            return res.status(400).json({
-              success:false,
-              error:"Some fields are missing"
-            });
-        } 
-       const organizationResourceData = await organResourcesModel.findOne({organization_id:organization_id,resource_type:"custom_templates"});
-
-        if(!organizationResourceData){
-              return res.status(400).json({
-                success:false,
-                error:"No data found"
-              });
-        }
-        let templatesArray = organizationResourceData.custom_templates ? organizationResourceData.custom_templates : [];
-        let modifiedTemplateOptions = extractFields(templatesArray);
-      return  res.status(200).json({
-        success:true,
-        data:modifiedTemplateOptions
-
-      })
- } catch (error) {
-          return res.status(400).json({
-            success:false,
-            error:error
-          })
-        }
+    if (!organization) {
+      logger.warn(
+        `⚠️ Organization resources not found for Organization ID: ${lead.organization_id}`
+      );
+      return res
+        .status(404)
+        .json({
+          success: false,
+          message: "Organization resources not found",
+          status: 404,
+        });
     }
-}
+
+    /** 🔍 Fetch user details */
+    const userData = await userModel
+      .findOne({ user_email: lead.contact_owner_email })
+      .lean();
+
+    /** 🔄 Structure mapping */
+    const map = {
+      "Customer Name": "customer_name",
+      "Project Name": "project_name",
+      "Follow Up Time": "next_follow_up_date_time",
+      "Project Map Link": "project_map_url",
+      "Lead Owner Email": "contact_owner_email",
+      "Lead Number": "lead_number",
+      "Project Details": "project_description",
+      "Lead Owner Name": "user_name",
+      "Lead Owner Number": "user_number",
+      "Project Address": "address",
+    };
+
+    /** 🔎 Find the matching template */
+    const template = organization.custom_templates.find(
+      (obj) => obj._id == template_id
+    );
+    if (!template) {
+      logger.warn(`⚠️ Template not found for Template ID: ${template_id}`);
+      return res
+        .status(404)
+        .json({ success: false, message: "Template not found", status: 404 });
+    }
+
+    /** 🔄 Construct the object with relevant details */
+    const obj = {
+      ...lead,
+      lead_number: lead.contact_no,
+      ...project,
+      ...(userData && {
+        user_name: `${userData.user_first_name} ${userData.user_last_name}`,
+        user_number: userData.contact_no,
+      }),
+      next_follow_up_date_time: formatDateTime(lead.next_follow_up_date_time),
+    };
+
+    /** 📝 Replace placeholders in the template */
+    const replacedText = template.template_data.replace(
+      /\{\{([^}]+)\}\}/g,
+      (match, key) => (obj[map[key]] ? obj[map[key]] : "Not Mentioned")
+    );
+
+    logger.info(
+      `✅ Message template created successfully for Lead ID: ${leadId}`
+    );
+    return res
+      .status(200)
+      .json({
+        success: true,
+        message: "Message template generated",
+        status: 200,
+        data: replacedText,
+      });
+  } catch (error) {
+    logger.error(`❌ Error creating message template: ${error.message}`);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Failed to create message template",
+        error: error.message,
+        status: 500,
+      });
+  }
+};
+
+/**
+ * 🔍 Fetch Templates
+ * Retrieves saved message templates for a given organization.
+ */
+templateController.fetchTemplates = async (req, res) => {
+  try {
+    const { organization_id } = req.body;
+
+    /** 🛑 Validate required fields */
+    if (!organization_id) {
+      logger.warn("⚠️ Missing organization ID for fetching templates");
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Organization ID is required",
+          status: 400,
+        });
+    }
+
+    logger.info(
+      `📡 Fetching templates for Organization ID: ${organization_id}`
+    );
+
+    /** 🚀 Fetch organization templates */
+    const organizationResourceData = await organResourcesModel.findOne({
+      organization_id,
+      resource_type: "custom_templates",
+    });
+
+    if (!organizationResourceData) {
+      logger.warn(
+        `⚠️ No templates found for Organization ID: ${organization_id}`
+      );
+      return res
+        .status(404)
+        .json({ success: false, message: "No templates found", status: 404 });
+    }
+
+    /** 🔄 Extract template fields */
+    const modifiedTemplateOptions =
+      organizationResourceData.custom_templates.map(
+        ({ template_name, _id }) => ({
+          label: template_name,
+          value: _id,
+        })
+      );
+
+    logger.info(
+      `✅ Templates retrieved successfully for Organization ID: ${organization_id}`
+    );
+    return res
+      .status(200)
+      .json({
+        success: true,
+        message: "Templates retrieved successfully",
+        status: 200,
+        data: modifiedTemplateOptions,
+      });
+  } catch (error) {
+    logger.error(`❌ Error fetching templates: ${error.message}`);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Failed to fetch templates",
+        error: error.message,
+        status: 500,
+      });
+  }
+};
+
+module.exports = templateController;

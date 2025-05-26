@@ -230,6 +230,7 @@ app.use("/query", newAuth, query);
 app.use("/userTracking", newAuth, userTracking);
 
 app.use("/contactResourcesMongo", newAuth, contactResourcesMongo);
+
 app.use("/apiQuestions", newAuth, apiQuestions);
 
 app.use("/otpVerification", newAuth, otpVerification);

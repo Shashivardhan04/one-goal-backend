@@ -1,21 +1,65 @@
-const express = require('express');
-const projectsController = require('../controllers/projectsController');
-var router = express.Router();
+const express = require("express");
+const logger = require("../services/logger"); // Ensure logger is properly imported
+const projectsController = require("../controllers/projectsController");
 
-const { Create, Update, FetchAll, Delete, FilterValues,FetchAllProjects } = projectsController;
+const router = express.Router();
 
-router.get('/fetchAll', FetchAll);
+/**
+ * 🛠 Utility function to handle async routes gracefully.
+ * Prevents repetitive try-catch blocks by centralizing error handling.
+ */
+const asyncHandler = (fn) => async (req, res, next) => {
+  try {
+    logger.info(`🚀 ${req.method} ${req.url} - Processing request`);
+    await fn(req, res);
+    logger.info(`✅ ${req.method} ${req.url} - Request successful`);
+  } catch (error) {
+    logger.error(`❌ ${req.method} ${req.url} - Error: ${error.message}`);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+      status: error.status || 500,
+    });
+  }
+};
 
-router.get('/fetchAllProjects', FetchAllProjects);
+/**
+ * 📂 Fetch All Projects
+ * Retrieves all available projects.
+ */
+router.get("/fetchAll", asyncHandler(projectsController.FetchAll));
 
-router.post('/create', Create);
+/**
+ * 📊 Fetch All Projects (Detailed)
+ * Retrieves detailed project data.
+ */
+router.get(
+  "/fetchAllProjects",
+  asyncHandler(projectsController.FetchAllProjects)
+);
 
-router.put('/update', Update);
+/**
+ * ➕ Create a New Project
+ * Handles project creation requests.
+ */
+router.post("/create", asyncHandler(projectsController.Create));
 
-// router.get('/fetchOne', FetchToken);
+/**
+ * ✏️ Update an Existing Project
+ * Modifies project data.
+ */
+router.put("/update", asyncHandler(projectsController.Update));
 
-router.post('/delete', Delete);
+/**
+ * ❌ Delete a Project
+ * Removes project data.
+ */
+router.post("/delete", asyncHandler(projectsController.Delete));
 
-router.get('/filterValues', FilterValues);
+/**
+ * 🔍 Filter Project Values
+ * Retrieves distinct values for filtering projects.
+ */
+router.get("/filterValues", asyncHandler(projectsController.FilterValues));
 
 module.exports = router;

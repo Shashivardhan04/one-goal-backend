@@ -1,32 +1,78 @@
 const qs = require("qs");
 const axios = require("axios");
 
-const ivrContoller = {};
+const ivrController = {};
 
-ivrContoller.soilSearchIvrInsert = async (req, res) => {
-  try{
+/**
+ * 📞 Soil Search IVR Insert
+ * Processes IVR request, extracts necessary data, and sends a lead creation request.
+ */
+ivrController.soilSearchIvrInsert = async (req, res) => {
+  try {
+    /** 🔄 Extract query parameters */
     const splittedUrl = req.url.split("?");
-    reqDataWithToken = qs.parse(splittedUrl[1]);
-    reqDataWithData = qs.parse(splittedUrl[2]);
-    let token = reqDataWithToken.token;
-    let contact_no = reqDataWithData.SourceNumber;
-    let associate_contact = reqDataWithData.DialWhomNumber;
-    let duration = reqDataWithData.CallDuration;
-    let voice_url = reqDataWithData.CallRecordingUrl;
+    const reqDataWithToken = qs.parse(splittedUrl[1] || "");
+    const reqDataWithData = qs.parse(splittedUrl[2] || "");
+
+    /** 🛑 Validate required fields */
+    const { token } = reqDataWithToken;
+    const {
+      SourceNumber: contact_no,
+      DialWhomNumber: associate_contact,
+      CallDuration: duration,
+      CallRecordingUrl: voice_url,
+    } = reqDataWithData;
+
+    if (
+      !token ||
+      !contact_no ||
+      !associate_contact ||
+      !duration ||
+      !voice_url
+    ) {
+      logger.warn("⚠️ Missing required parameters for IVR lead creation");
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields",
+        status: 400,
+      });
+    }
+
+    logger.info(
+      `📡 Processing IVR lead creation for Contact Number: ${contact_no}`
+    );
+
+    /** 💾 Prepare request body */
     const bodyData = {
-     contact_no,
-     associate_contact,
-     duration,
-     voice_url,
-     customer_name:"IVR",
-     token
+      contact_no,
+      associate_contact,
+      duration,
+      voice_url,
+      customer_name: "IVR",
+      token,
     };
-    let data = await axios.post('https://api.read-pro.com/createContacts', bodyData)
-    return res.status(200).json({"success": true,message:data.data.message});
-  }catch(err){
-    console.log(err);
-    return res.status(400).json({"success": false,error:err.message,message:"IVR lead couldn't be created"});
+
+    /** 🚀 Send lead creation request */
+    const { data } = await axios.post(
+      "https://api.read-pro.com/createContacts",
+      bodyData
+    );
+
+    logger.info(
+      `✅ IVR lead created successfully for Contact Number: ${contact_no}`
+    );
+    return res
+      .status(200)
+      .json({ success: true, message: data.message, status: 200 });
+  } catch (error) {
+    logger.error(`❌ Error creating IVR lead: ${error.message}`);
+    return res.status(500).json({
+      success: false,
+      message: "IVR lead couldn't be created",
+      error: error.message,
+      status: 500,
+    });
   }
 };
 
-module.exports = ivrContoller;
+module.exports = ivrController;

@@ -1,60 +1,74 @@
-const storeSMSModel = require("../models/storeSMSSchema.js")
-
+const storeSMSModel = require("../models/storeSMSSchema.js");
+const logger = require("../services/logger");
 const storeSMSController = {};
 
+/**
+ * 📩 Store SMS
+ * Validates input data and stores SMS records securely.
+ */
 storeSMSController.storeSMS = async (req, res) => {
   try {
-    let data = req.body;
-console.log("HNHTYEHYN",data)
-    if(data.mobile_number === undefined){
-        return res.status(400).json({
-            success: false,
-            message: "Mobile number field cannot be empty",
-          });
+    const { uid, organization_id, mobile_number, sms_data } = req.body;
+
+    /** 🛑 Validate required fields */
+    if (!mobile_number) {
+      logger.warn("⚠️ Missing mobile number field");
+      return res.status(400).json({
+        success: false,
+        message: "Mobile number field cannot be empty",
+        status: 400,
+      });
     }
-    if(data.uid === undefined){
-        return res.status(400).json({
-            success: false,
-            message: "Uid field cannot be empty",
-          });
+    if (!uid) {
+      logger.warn("⚠️ Missing UID field");
+      return res.status(400).json({
+        success: false,
+        message: "UID field cannot be empty",
+        status: 400,
+      });
     }
-    if(data.organization_id === undefined){
-        return res.status(400).json({
-            success: false,
-            message: "Organization field cannot be empty",
-          });
+    if (!organization_id) {
+      logger.warn("⚠️ Missing Organization ID field");
+      return res.status(400).json({
+        success: false,
+        message: "Organization field cannot be empty",
+        status: 400,
+      });
     }
-    if(data.sms_data === undefined){
-        return res.status(400).json({
-            success: false,
-            message: "Please enter sms data",
-          });
+    if (!sms_data) {
+      logger.warn("⚠️ Missing SMS data field");
+      return res.status(400).json({
+        success: false,
+        message: "Please enter SMS data",
+        status: 400,
+      });
     }
 
-    const storeMongoSms = await new storeSMSModel({
-        uid:data.uid,
-        organization_id:data.organization_id,
-        mobile_number:data.mobile_number,
-        sms_data:data.sms_data,
-    })
+    logger.info(`📡 Storing SMS for UID: ${uid}`);
 
-    await storeMongoSms.save()
+    /** 🚀 Create and store SMS record */
+    const storeMongoSms = new storeSMSModel({
+      uid,
+      organization_id,
+      mobile_number,
+      sms_data,
+    });
+    await storeMongoSms.save();
 
-
-    return res.status(200).json({
+    logger.info(`✅ SMS stored successfully for UID: ${uid}`);
+    return res.status(201).json({
       success: true,
-      message: "Data Updated Successfully",
-    //   data: data,
+      message: "Data updated successfully",
+      status: 201,
     });
   } catch (error) {
-    console.log("An error occurred while fetching user permissions", error);
-    return res.status(400).json({
+    logger.error(`❌ Error storing SMS data: ${error.message}`);
+    return res.status(500).json({
       success: false,
-      message: "An error occurred while fetching user permissions",
+      message: "An error occurred while storing SMS data",
+      status: 500,
       error: error.message,
     });
   }
 };
-
-
 module.exports = storeSMSController;
